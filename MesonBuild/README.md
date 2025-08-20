@@ -11,12 +11,15 @@
 
 ## 支持的平台
 
-| 平台 | 架构 | 工具链要求 |
-|------|------|------------|
-| Windows | x86_64, x86, ARM64 | MinGW-w64 |
-| Linux | x86_64 | GCC |
-| macOS | Universal (ARM64+x86_64) | Xcode |
-| Android | ARM64, ARM32, x86_64, x86 | Android NDK |
+| 平台 | 架构 | 工具链要求 | 状态 |
+|------|------|------------|------|
+| Windows | x86_64, x86 | MinGW-w64 | ✅ 完全支持 |
+| Windows | ARM64 | MinGW-w64 (ARM64) | ⚠️ 受限支持* |
+| Linux | x86_64 | GCC | ✅ 完全支持 |
+| macOS | Universal (ARM64+x86_64) | Xcode | ✅ 完全支持 |
+| Android | ARM64, ARM32, x86_64, x86 | Android NDK | ✅ 完全支持 |
+
+**\* Windows ARM64 限制说明**: 大多数Linux发行版不提供ARM64 MinGW工具链，可使用Docker或CI/CD方案。
 
 ## 主要特性
 
@@ -45,7 +48,9 @@ cd scripts
 - 🖥️ 支持 Linux 和 macOS 系统
 - ⚙️ 自动设置环境变量（如 ANDROID_NDK_ROOT）
 
-如果所有检查都通过，你可以直接跳到[构建步骤](#3-构建)。
+如果所有检查都通过，你可以直接跳到[构建步骤](#4-构建)。
+
+**重要提示**: Windows ARM64支持受限，详见[平台限制](#平台限制)。
 
 ### 2. 手动安装依赖（可选）
 
@@ -229,3 +234,35 @@ rm -rf build-*
 2. 更新 `meson.build` 中的平台检测逻辑
 3. 更新构建脚本中的平台列表
 4. 测试构建是否正常工作
+
+## 平台限制
+
+### Windows ARM64 支持
+
+由于大多数Linux发行版（包括Ubuntu 24.04）不提供ARM64 MinGW工具链，`windows-arm64`目标有以下限制：
+
+**可用选项：**
+1. **Docker方案 (推荐)**:
+   ```bash
+   docker run --rm -v $(pwd):/workspace dockcross/windows-arm64 \
+     bash -c "cd /workspace && ./build-platform.sh windows-arm64"
+   ```
+
+2. **CI/CD方案**:
+   - GitHub Actions with custom runners  
+   - 使用专门的交叉编译环境
+
+3. **原生Windows环境**:
+   - Visual Studio with Windows SDK
+   - LLVM/Clang with Windows ARM64 target
+
+**环境检查脚本会自动检测并提供详细的替代方案说明。**
+
+### 构建结果
+
+成功构建后，库文件将位于：
+- Windows x86_64: `Plugins/lib/windows/x86_64/gilzoide-sqlite-net.dll`
+- Windows x86: `Plugins/lib/windows/x86/gilzoide-sqlite-net.dll`  
+- Linux x86_64: `Plugins/lib/linux/x86_64/libgilzoide-sqlite-net.so`
+- macOS Universal: `Plugins/lib/macos/libgilzoide-sqlite-net.dylib`
+- Android: `Plugins/lib/android/{arm64,arm32,x86_64,x86}/libgilzoide-sqlite-net.so`
