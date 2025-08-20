@@ -1,12 +1,13 @@
-# Unity SQLite.NET Meson 构建系统
+# Unity SQLCipher.NET Meson 构建系统
 
-这是一个基于 Meson 的构建系统，用于为多个平台构建 Unity SQLite.NET 的原生库。
+这是一个基于 Meson 的构建系统，用于为多个平台构建 Unity SQLCipher.NET 的原生加密库，使用 OpenSSL 作为加密后端。
 
 ## 系统要求
 
 - [Meson](https://mesonbuild.com/) >= 0.56
 - [Ninja](https://ninja-build.org/)
 - 对应平台的编译器工具链
+- **源码要求**：`../Plugins/sqlite-amalgamation/sqlite3.c` 必须是 SQLCipher 源码
 
 ## 支持的平台
 
@@ -16,6 +17,15 @@
 | Linux | x86_64 | GCC |
 | macOS | Universal (ARM64+x86_64) | Xcode |
 | Android | ARM64, ARM32, x86_64, x86 | Android NDK |
+
+## 主要特性
+
+- ✅ **SQLCipher 加密支持**：使用 OpenSSL 3.0.8 作为加密后端
+- ✅ **静态链接 OpenSSL**：避免版本冲突，确保可移植性
+- ✅ **符号隐藏**：OpenSSL 符号完全隐藏，防止与其他库冲突
+- ✅ **16KB 对齐支持**：Android 平台自动配置 16KB 页面对齐
+- ✅ **多平台交叉编译**：支持 Windows、Linux、macOS、Android
+- ✅ **版本可控**：强制使用指定的 OpenSSL 3.0.8 版本
 
 ## 快速开始
 

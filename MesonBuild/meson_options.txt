@@ -10,3 +10,11 @@ option('macos_codesign_identity', type : 'string', value : '', description : 'ma
 
 # Windows MinGW 工具链选项
 option('mingw_prefix', type : 'string', value : '', description : 'MinGW toolchain prefix (e.g., x86_64-w64-mingw32)')
+
+# SQLCipher 相关选项
+option('sqlcipher_crypto_backend', type : 'combo', choices : ['openssl', 'libressl', 'commoncrypto', 'nss'], value : 'openssl', description : 'Cryptographic backend for SQLCipher')
+option('sqlcipher_enable_fts', type : 'boolean', value : true, description : 'Enable Full-Text Search (FTS4/FTS5)')
+option('sqlcipher_enable_rtree', type : 'boolean', value : true, description : 'Enable R-Tree spatial indexing')
+option('sqlcipher_enable_json', type : 'boolean', value : true, description : 'Enable JSON1 extension')
+option('sqlcipher_temp_store', type : 'combo', choices : ['0', '1', '2'], value : '2', description : 'SQLite temporary storage (0=file, 1=file/memory, 2=memory)')
+option('sqlcipher_threadsafe', type : 'boolean', value : true, description : 'Enable thread safety')

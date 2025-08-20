@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 构建单个平台的脚本
-# 用法: ./build-platform.sh <platform> [debug|release]
+# 用法: ./build-platform.sh <platform> [debug|release] [additional-meson-options...]
 
 set -e
 
@@ -11,8 +11,12 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PLATFORM="$1"
 BUILD_TYPE="${2:-release}"
 
+# 从第3个参数开始的所有参数都作为额外的 meson 选项
+shift 2 2>/dev/null || true
+EXTRA_MESON_OPTIONS="$@"
+
 if [[ -z "$PLATFORM" ]]; then
-    echo "用法: $0 <platform> [debug|release]"
+    echo "用法: $0 <platform> [debug|release] [additional-meson-options...]"
     echo ""
     echo "支持的平台:"
     echo "  windows-x86_64     - Windows 64位"
@@ -24,6 +28,11 @@ if [[ -z "$PLATFORM" ]]; then
     echo "  android-arm32      - Android ARM32"
     echo "  android-x86_64     - Android x86_64"
     echo "  android-x86        - Android x86"
+    echo ""
+    echo "示例:"
+    echo "  $0 linux-x86_64 release                              # 标准构建"
+    echo "  $0 linux-x86_64 release -Dsqlcipher_temp_store=0     # 临时存储到硬盘"
+    echo "  $0 android-arm64 debug -Dsqlcipher_threadsafe=false  # 禁用线程安全"
     exit 1
 fi
 
@@ -75,14 +84,19 @@ else
     ANDROID_OPTIONS=""
 fi
 
-echo "开始构建 $PLATFORM ($BUILD_TYPE 模式)..."
+if [[ -n "$EXTRA_MESON_OPTIONS" ]]; then
+    echo "开始构建 $PLATFORM ($BUILD_TYPE 模式，额外选项: $EXTRA_MESON_OPTIONS)..."
+else
+    echo "开始构建 $PLATFORM ($BUILD_TYPE 模式)..."
+fi
 
 # 配置构建
 cd "$PROJECT_ROOT"
 meson setup "$BUILD_DIR" \
     --cross-file="$CROSS_FILE" \
     $BUILD_TYPE_OPTION \
-    $ANDROID_OPTIONS
+    $ANDROID_OPTIONS \
+    $EXTRA_MESON_OPTIONS
 
 # 构建
 meson compile -C "$BUILD_DIR"

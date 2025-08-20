@@ -1,0 +1,7 @@
+{
+  global:
+    sqlite3_*;
+    sqlcipher_*;
+  local:
+    *;
+};

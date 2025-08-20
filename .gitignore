@@ -2,3 +2,6 @@
 *.o~
 Samples
 Samples.meta
+# 忽略 subprojects 目录及其下所有文件/子目录
+subprojects/
+
