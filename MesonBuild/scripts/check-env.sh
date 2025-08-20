@@ -504,6 +504,34 @@ main() {
     
     echo ""
     
+    # 检查 Meson 子项目依赖
+    print_info "检查 Meson 子项目依赖..."
+    
+    # 检查 OpenSSL wrap 配置
+    openssl_wrap_file="subprojects/openssl.wrap"
+    if [[ -f "$openssl_wrap_file" ]]; then
+        openssl_version=$(grep 'wrapdb_version' "$openssl_wrap_file" | cut -d'=' -f2 | tr -d ' ')
+        print_success "OpenSSL wrap 配置已存在: v$openssl_version"
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        
+        # 检查是否已下载
+        openssl_subproject_dir="subprojects/openssl-3.0.8"
+        if [[ -d "$openssl_subproject_dir" ]]; then
+            print_success "OpenSSL 子项目已下载"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        else
+            print_info "OpenSSL 子项目尚未下载，首次构建时会自动下载"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        fi
+    else
+        print_error "缺少 OpenSSL wrap 配置文件"
+        print_info "请确保 subprojects/openssl.wrap 文件存在"
+        FAILED_CHECKS+=("OpenSSL wrap 配置")
+    fi
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 2))
+    
+    echo ""
+    
     # 检查 Android NDK
     check_android_ndk
     
