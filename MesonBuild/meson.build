@@ -114,7 +114,7 @@ elif host_system == 'darwin'
 # Android 配置 (通过交叉编译文件处理)
 elif host_system.contains('android') or get_option('android_build')
   platform_c_args += ['-fPIC']
-  platform_link_args += ['-shared', '-lm', '-Wl,-z,max-page-size=16384']
+  platform_link_args += ['-shared', '-lm', '-llog', '-Wl,-z,max-page-size=16384']  # 添加 -llog
   # 保持默认名称，Meson 会自动添加 'lib' 前缀
   library_suffix = '.so'
   
