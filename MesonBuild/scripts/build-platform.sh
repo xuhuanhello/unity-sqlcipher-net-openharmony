@@ -30,9 +30,13 @@ if [[ -z "$PLATFORM" ]]; then
     echo "  android-x86        - Android x86"
     echo ""
     echo "示例:"
-    echo "  $0 linux-x86_64 release                              # 标准构建"
-    echo "  $0 linux-x86_64 release -Dsqlcipher_temp_store=0     # 临时存储到硬盘"
-    echo "  $0 android-arm64 debug -Dsqlcipher_threadsafe=false  # 禁用线程安全"
+    echo "  $0 linux-x86_64 release                       # 标准构建"
+    echo "  $0 android-arm64 debug                        # Android ARM64 调试版"
+    echo "  $0 windows-x86_64 release                     # Windows 64位版"
+    echo ""
+    echo "注意："
+    echo "  SQLCipher 配置现在统一在 ../Plugins/sqlite-amalgamation/sqlite3_defines.h 中管理"
+    echo "  如需修改临时存储模式等配置，请直接编辑该头文件"
     exit 1
 fi
 

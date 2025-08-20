@@ -87,14 +87,24 @@ echo ""
 # 逐个构建平台
 for platform in "${PLATFORMS[@]}"; do
     echo "[$((SUCCESS_COUNT + 1))/$TOTAL_PLATFORMS] 构建 $platform..."
+    echo "DEBUG: 开始构建平台 $platform"
     
-    if "$SCRIPT_DIR/build-platform.sh" "$platform" "$BUILD_TYPE"; then
+    # 使用 set +e 临时允许命令失败，避免整个脚本退出
+    set +e
+    "$SCRIPT_DIR/build-platform.sh" "$platform" "$BUILD_TYPE"
+    BUILD_RESULT=$?
+    set -e
+    
+    echo "DEBUG: 平台 $platform 构建结束，退出码: $BUILD_RESULT"
+    
+    if [[ $BUILD_RESULT -eq 0 ]]; then
         echo "✓ $platform 构建成功"
-        ((SUCCESS_COUNT++))
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     else
-        echo "✗ $platform 构建失败"
+        echo "✗ $platform 构建失败 (退出码: $BUILD_RESULT)"
         FAILED_PLATFORMS+=("$platform")
     fi
+    echo "DEBUG: 当前成功数: $SUCCESS_COUNT，失败数: ${#FAILED_PLATFORMS[@]}"
     echo ""
 done
 

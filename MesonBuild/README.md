@@ -58,7 +58,23 @@ brew install mingw-w64
 export ANDROID_NDK_ROOT=/path/to/your/android-ndk
 ```
 
-### 3. 构建
+### 3. SQLCipher 配置
+
+**重要**：SQLCipher 的所有配置现在统一在 `../Plugins/sqlite-amalgamation/sqlite3_defines.h` 文件中管理。
+
+**常用配置项**：
+```c
+#define SQLITE_TEMP_STORE 2                    // 临时存储：2=内存优先, 3=仅内存 (SQLCipher要求>=2)
+#define SQLITE_THREADSAFE 1                    // 线程安全：0=禁用, 1=启用
+#define SQLITE_DEFAULT_FOREIGN_KEYS 1          // 外键：0=禁用, 1=启用
+```
+
+**重要限制**：
+- ⚠️ SQLCipher 不支持文件临时存储模式 (`SQLITE_TEMP_STORE=0` 或 `1`)
+- ✅ 必须使用内存临时存储模式 (`SQLITE_TEMP_STORE=2` 或 `3`)
+- 📝 这是 SQLCipher 的安全特性，确保临时数据不会以明文形式写入磁盘
+
+### 4. 构建
 
 #### 构建单个平台
 ```bash

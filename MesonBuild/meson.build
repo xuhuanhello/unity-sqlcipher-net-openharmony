@@ -17,31 +17,14 @@ openssl_dep = openssl_subproject.get_variable('libcrypto_dep')
 # 源文件路径 (现在应该是 SQLCipher 源码)
 sqlite_src = '../Plugins/sqlite-amalgamation/sqlite3.c'
 
-# SQLCipher 编译定义
+# SQLCipher 编译定义 - 现在通过头文件统一配置
 sqlcipher_c_args = [
-  # SQLCipher 核心配置
-  '-DSQLITE_HAS_CODEC=1',                              # 启用加密支持
-  '-DSQLCIPHER_CRYPTO_OPENSSL=1',                      # 使用 OpenSSL 作为加密后端
-  '-DSQLITE_EXTRA_INIT=sqlcipher_extra_init',          # SQLCipher 必需的初始化函数
-  '-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown',  # SQLCipher 必需的关闭函数
-  
-  # 基础配置
-  '-DSQLITE_THREADSAFE=1',             # 线程安全
-  '-DSQLITE_TEMP_STORE=2',             # 临时数据存储在内存
-  '-DSQLITE_SOUNDEX=1',                # 启用 Soundex 支持
-  '-DSQLITE_DEFAULT_FOREIGN_KEYS=1',   # 默认启用外键
-  '-DSQLITE_MAX_ATTACHED=10',          # 最大附加数据库数量
-  
-  # 功能扩展（避免与 OMIT 选项冲突）
-  '-DSQLITE_ENABLE_RTREE=1',           # 启用 R-tree 支持
-  '-DSQLITE_ENABLE_FTS4=1',            # 启用全文搜索 FTS4
-  '-DSQLITE_ENABLE_FTS5=1',            # 启用全文搜索 FTS5
-  '-DSQLITE_ENABLE_JSON1=1',           # 启用 JSON 支持
-  '-DSQLITE_ENABLE_GEOPOLY=1',         # 启用地理多边形支持
-  
   # 类型支持
   '-D_GNU_SOURCE',                     # 启用 GNU 扩展，包含完整的类型定义
   '-include', 'stdint.h',              # 强制包含 stdint.h 头文件
+  
+  # 强制包含 SQLite/SQLCipher 配置文件
+  '-include', join_paths(meson.current_source_dir(), '../Plugins/sqlite-amalgamation/sqlite3_defines.h'),
 ]
 
 # 符号隐藏配置 (防止 OpenSSL 符号冲突)
