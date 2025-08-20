@@ -33,12 +33,12 @@ symbol_export_files = []
 
 if host_machine.system() == 'windows'
   # Windows 使用 .def 文件控制符号导出
-  symbol_hiding_args += ['/DEF:' + meson.current_source_dir() + '/exports.def']
-  symbol_export_files += [meson.current_source_dir() + '/exports.def']
+  # .def 文件在 Meson 中需要直接作为源文件包含，不能作为链接参数
+  # 不需要额外的链接参数，Meson 会自动处理 .def 文件
+  symbol_hiding_args = []
 else
   # Unix-like 系统使用版本脚本隐藏符号
   symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports.map']
-  symbol_export_files += [meson.current_source_dir() + '/exports.map']
 endif
 
 # 基础编译参数
@@ -120,19 +120,25 @@ endif
 
 # 构建动态库
 library_sources = [sqlite_src]
-if host_machine.system() == 'windows' and symbol_export_files.length() > 0
-  # Windows 平台需要将 .def 文件作为源文件传递
-  library_sources += symbol_export_files
+
+# 准备库构建的额外参数
+extra_args = {
+  'c_args' : platform_c_args,
+  'link_args' : platform_link_args,
+  'dependencies' : [openssl_dep],  # 添加 OpenSSL 依赖
+  'install' : false,  # 不使用默认安装，手动复制到指定位置
+  'name_suffix' : library_suffix.substring(1),  # 去掉前面的点
+}
+
+# Windows 平台添加 .def 文件支持
+if host_machine.system() == 'windows'
+  extra_args += {'vs_module_defs' : meson.current_source_dir() + '/exports.def'}
 endif
 
 sqlite_lib = shared_library(
   library_name,
   library_sources,
-  c_args : platform_c_args,
-  link_args : platform_link_args,
-  dependencies : [openssl_dep],  # 添加 OpenSSL 依赖
-  install : false,  # 不使用默认安装，手动复制到指定位置
-  name_suffix : library_suffix.substring(1),  # 去掉前面的点
+  kwargs : extra_args
 )
 
 # 自定义安装目标

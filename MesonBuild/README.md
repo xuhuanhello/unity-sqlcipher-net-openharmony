@@ -29,7 +29,27 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 环境检查（推荐）
+
+首先运行环境检查脚本，确保所有必要的工具都已安装：
+
+```bash
+cd scripts
+./check-env.sh
+```
+
+这个脚本会：
+- 🔍 检查基础构建工具（meson, ninja, build-essential）
+- 🔍 检查交叉编译工具链（mingw, Android NDK）
+- 📦 自动提示安装缺失的工具
+- 🖥️ 支持 Linux 和 macOS 系统
+- ⚙️ 自动设置环境变量（如 ANDROID_NDK_ROOT）
+
+如果所有检查都通过，你可以直接跳到[构建步骤](#3-构建)。
+
+### 2. 手动安装依赖（可选）
+
+如果不使用自动检查脚本，可以手动安装：
 
 ```bash
 # Ubuntu/Debian
@@ -41,8 +61,6 @@ brew install meson ninja
 # Windows (使用 MSYS2)
 pacman -S mingw-w64-x86_64-meson mingw-w64-x86_64-ninja
 ```
-
-### 2. 设置工具链
 
 #### MinGW (Windows交叉编译)
 ```bash
@@ -75,6 +93,8 @@ export ANDROID_NDK_ROOT=/path/to/your/android-ndk
 - 📝 这是 SQLCipher 的安全特性，确保临时数据不会以明文形式写入磁盘
 
 ### 4. 构建
+
+#### 构建所有平台
 
 #### 构建单个平台
 ```bash

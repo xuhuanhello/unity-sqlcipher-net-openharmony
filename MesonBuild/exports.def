@@ -58,14 +58,14 @@ sqlite3_errmsg
 sqlite3_errmsg16
 sqlite3_sql
 sqlite3_expanded_sql
-sqlite3_normalized_sql
+; sqlite3_normalized_sql - 此符号在某些SQLCipher版本中不存在，已注释
 sqlite3_get_autocommit
 sqlite3_db_handle
 sqlite3_next_stmt
 sqlite3_commit_hook
 sqlite3_rollback_hook
 sqlite3_update_hook
-sqlite3_enable_shared_cache
+; sqlite3_enable_shared_cache - 此符号在某些SQLCipher版本中不存在，已注释
 sqlite3_release_memory
 sqlite3_db_release_memory
 sqlite3_soft_heap_limit64
@@ -95,7 +95,7 @@ sqlite3_key_v2
 sqlite3_rekey
 sqlite3_rekey_v2
 sqlite3_activate_see
-sqlite3_activate_cerod
+; sqlite3_activate_cerod - 此符号在某些SQLCipher版本中不存在，已注释
 
 ; 内存管理
 sqlite3_malloc
