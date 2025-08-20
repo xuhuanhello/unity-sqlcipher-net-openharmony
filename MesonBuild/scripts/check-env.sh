@@ -508,14 +508,18 @@ main() {
     print_info "检查 Meson 子项目依赖..."
     
     # 检查 OpenSSL wrap 配置
-    openssl_wrap_file="subprojects/openssl.wrap"
+    # 获取脚本所在目录，然后找到MesonBuild根目录
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    meson_build_dir="$(dirname "$script_dir")"
+    openssl_wrap_file="$meson_build_dir/subprojects/openssl.wrap"
+    
     if [[ -f "$openssl_wrap_file" ]]; then
         openssl_version=$(grep 'wrapdb_version' "$openssl_wrap_file" | cut -d'=' -f2 | tr -d ' ')
         print_success "OpenSSL wrap 配置已存在: v$openssl_version"
         PASSED_CHECKS=$((PASSED_CHECKS + 1))
         
         # 检查是否已下载
-        openssl_subproject_dir="subprojects/openssl-3.0.8"
+        openssl_subproject_dir="$meson_build_dir/subprojects/openssl-3.0.8"
         if [[ -d "$openssl_subproject_dir" ]]; then
             print_success "OpenSSL 子项目已下载"
             PASSED_CHECKS=$((PASSED_CHECKS + 1))
@@ -529,16 +533,16 @@ main() {
         
         echo ""
         print_info "OpenSSL wrap 配置文件不存在，需要安装依赖"
-        print_info "将在当前目录安装: $(pwd)"
+        print_info "将在MesonBuild目录安装: $meson_build_dir"
         echo ""
         
-        if ask_install "OpenSSL wrap 配置" "meson wrap install openssl && meson subprojects download"; then
+        if ask_install "OpenSSL wrap 配置" "cd $meson_build_dir && meson wrap install openssl && meson subprojects download"; then
             print_info "正在安装 OpenSSL wrap..."
-            if meson wrap install openssl; then
+            if (cd "$meson_build_dir" && meson wrap install openssl); then
                 print_success "OpenSSL wrap 安装完成"
                 
                 print_info "正在下载 OpenSSL 子项目..."
-                if meson subprojects download openssl; then
+                if (cd "$meson_build_dir" && meson subprojects download openssl); then
                     print_success "OpenSSL 子项目下载完成"
                     PASSED_CHECKS=$((PASSED_CHECKS + 1))
                 else
@@ -547,7 +551,7 @@ main() {
                 fi
             else
                 print_error "OpenSSL wrap 安装失败"
-                print_info "请手动运行: meson wrap install openssl"
+                print_info "请手动运行: cd $meson_build_dir && meson wrap install openssl"
             fi
         fi
     fi
