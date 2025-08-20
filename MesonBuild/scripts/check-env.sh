@@ -330,7 +330,13 @@ main() {
     # 检查基础构建工具
     print_info "检查基础构建工具..."
     check_command "meson" "Meson 构建系统" "pip3 install meson" true
-    check_command "ninja" "Ninja 构建工具" "" true
+    
+    # 根据操作系统设置 ninja 安装命令
+    if [[ "$OS" == "macos" ]]; then
+        check_command "ninja" "Ninja 构建工具" "brew install ninja" true
+    else
+        check_command "ninja" "Ninja 构建工具" "sudo apt-get install -y ninja-build" true
+    fi
     
     # 根据操作系统检查特定工具
     if [[ "$OS" == "linux" ]]; then
@@ -338,11 +344,6 @@ main() {
         
         # 检查 build-essential
         check_package "build-essential" "构建基础工具" "sudo apt-get update && sudo apt-get install -y build-essential"
-        
-        # 检查 ninja-build (Ubuntu/Debian 包名)
-        if ! command -v ninja &> /dev/null; then
-            check_package "ninja-build" "Ninja 构建工具" "sudo apt-get install -y ninja-build"
-        fi
         
         # 检查 MinGW 交叉编译工具链
         print_info "检查 Windows 交叉编译工具链..."
