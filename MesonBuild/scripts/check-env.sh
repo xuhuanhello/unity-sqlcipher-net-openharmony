@@ -525,8 +525,31 @@ main() {
         fi
     else
         print_error "缺少 OpenSSL wrap 配置文件"
-        print_info "请确保 subprojects/openssl.wrap 文件存在"
         FAILED_CHECKS+=("OpenSSL wrap 配置")
+        
+        echo ""
+        print_info "OpenSSL wrap 配置文件不存在，需要安装依赖"
+        print_info "将在当前目录安装: $(pwd)"
+        echo ""
+        
+        if ask_install "OpenSSL wrap 配置" "meson wrap install openssl && meson subprojects download"; then
+            print_info "正在安装 OpenSSL wrap..."
+            if meson wrap install openssl; then
+                print_success "OpenSSL wrap 安装完成"
+                
+                print_info "正在下载 OpenSSL 子项目..."
+                if meson subprojects download openssl; then
+                    print_success "OpenSSL 子项目下载完成"
+                    PASSED_CHECKS=$((PASSED_CHECKS + 1))
+                else
+                    print_warning "OpenSSL 子项目下载失败，构建时会自动下载"
+                    PASSED_CHECKS=$((PASSED_CHECKS + 1))
+                fi
+            else
+                print_error "OpenSSL wrap 安装失败"
+                print_info "请手动运行: meson wrap install openssl"
+            fi
+        fi
     fi
     TOTAL_CHECKS=$((TOTAL_CHECKS + 2))
     
