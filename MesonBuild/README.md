@@ -1,0 +1,185 @@
+# Unity SQLite.NET Meson 构建系统
+
+这是一个基于 Meson 的构建系统，用于为多个平台构建 Unity SQLite.NET 的原生库。
+
+## 系统要求
+
+- [Meson](https://mesonbuild.com/) >= 0.56
+- [Ninja](https://ninja-build.org/)
+- 对应平台的编译器工具链
+
+## 支持的平台
+
+| 平台 | 架构 | 工具链要求 |
+|------|------|------------|
+| Windows | x86_64, x86, ARM64 | MinGW-w64 |
+| Linux | x86_64 | GCC |
+| macOS | Universal (ARM64+x86_64) | Xcode |
+| Android | ARM64, ARM32, x86_64, x86 | Android NDK |
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+# Ubuntu/Debian
+sudo apt install meson ninja-build
+
+# macOS
+brew install meson ninja
+
+# Windows (使用 MSYS2)
+pacman -S mingw-w64-x86_64-meson mingw-w64-x86_64-ninja
+```
+
+### 2. 设置工具链
+
+#### MinGW (Windows交叉编译)
+```bash
+# Ubuntu/Debian
+sudo apt install mingw-w64
+
+# macOS
+brew install mingw-w64
+```
+
+#### Android NDK
+```bash
+export ANDROID_NDK_ROOT=/path/to/your/android-ndk
+```
+
+### 3. 构建
+
+#### 构建单个平台
+```bash
+# 构建 Linux x86_64 (Release)
+./scripts/build-platform.sh linux-x86_64
+
+# 构建 Windows x86_64 (Debug)
+./scripts/build-platform.sh windows-x86_64 debug
+
+# 构建 Android ARM64
+./scripts/build-platform.sh android-arm64
+```
+
+#### 批量构建
+```bash
+# 构建所有平台
+./scripts/build-all.sh
+
+# 构建所有 Android 平台
+./scripts/build-all.sh release android
+
+# 构建所有 Windows 平台 (Debug 模式)
+./scripts/build-all.sh debug windows
+```
+
+## 手动构建
+
+如果需要更精细的控制，可以手动运行 Meson 命令：
+
+```bash
+# 配置构建 (以 Linux x86_64 为例)
+meson setup build-linux-x86_64 --cross-file=cross-files/linux-x86_64.ini
+
+# 编译
+meson compile -C build-linux-x86_64
+
+# 配置 Android ARM64 构建
+export ANDROID_NDK_ROOT=/path/to/ndk
+meson setup build-android-arm64 \
+    --cross-file=cross-files/android-arm64.ini \
+    -Dandroid_build=true \
+    -Dandroid_abi=arm64-v8a
+
+# 编译 Android
+meson compile -C build-android-arm64
+```
+
+## 构建选项
+
+在 `meson_options.txt` 中定义了以下选项：
+
+- `android_build`: 是否为 Android 平台构建 (boolean)
+- `android_abi`: Android ABI 类型 (arm64-v8a, armeabi-v7a, x86_64, x86)
+- `android_ndk_root`: Android NDK 根目录路径
+- `macos_codesign_identity`: macOS 代码签名身份
+- `mingw_prefix`: MinGW 工具链前缀
+
+使用示例：
+```bash
+meson setup build-dir --cross-file=cross-files/android-arm64.ini \
+    -Dandroid_build=true \
+    -Dandroid_abi=arm64-v8a
+```
+
+## 输出文件
+
+构建完成后，库文件将被复制到以下位置：
+
+```
+../Plugins/lib/
+├── windows/
+│   ├── x86_64/gilzoide-sqlite-net.dll
+│   ├── x86/gilzoide-sqlite-net.dll
+│   └── arm64/gilzoide-sqlite-net.dll
+├── linux/
+│   └── x86_64/libgilzoide-sqlite-net.so
+├── macos/
+│   └── libgilzoide-sqlite-net.dylib
+└── android/
+    ├── arm64/libgilzoide-sqlite-net.so
+    ├── arm32/libgilzoide-sqlite-net.so
+    ├── x86_64/libgilzoide-sqlite-net.so
+    └── x86/libgilzoide-sqlite-net.so
+```
+
+## 故障排除
+
+### 1. Android NDK 问题
+确保设置了 `ANDROID_NDK_ROOT` 环境变量：
+```bash
+export ANDROID_NDK_ROOT=/path/to/your/android-ndk
+```
+
+### 2. MinGW 工具链问题
+确保安装了完整的 MinGW-w64 工具链：
+```bash
+# 检查工具链是否可用
+x86_64-w64-mingw32-gcc --version
+i686-w64-mingw32-gcc --version
+aarch64-w64-mingw32-gcc --version
+```
+
+### 3. macOS 代码签名
+如果需要代码签名，设置签名身份：
+```bash
+meson setup build-macos --cross-file=cross-files/macos-universal.ini \
+    -Dmacos_codesign_identity="Developer ID Application: Your Name"
+```
+
+### 4. 清理构建
+```bash
+# 清理所有构建目录
+rm -rf build-*
+```
+
+## 与原 Makefile 的对比
+
+| 功能 | Makefile | Meson |
+|------|----------|--------|
+| 构建速度 | 较慢 | 更快 (Ninja) |
+| 依赖管理 | 手动 | 自动 |
+| 交叉编译 | 手动配置 | 标准化配置文件 |
+| 并行构建 | 有限支持 | 完全并行 |
+| IDE 集成 | 无 | 支持多种 IDE |
+| 配置缓存 | 无 | 自动缓存 |
+
+## 贡献
+
+如需添加新平台支持或改进构建配置，请：
+
+1. 在 `cross-files/` 目录添加新的交叉编译文件
+2. 更新 `meson.build` 中的平台检测逻辑
+3. 更新构建脚本中的平台列表
+4. 测试构建是否正常工作

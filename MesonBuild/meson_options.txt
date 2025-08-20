@@ -1,0 +1,12 @@
+# 构建选项配置
+
+# Android 构建相关选项
+option('android_build', type : 'boolean', value : false, description : 'Build for Android platform')
+option('android_abi', type : 'combo', choices : ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'], value : 'arm64-v8a', description : 'Android ABI to build for')
+option('android_ndk_root', type : 'string', value : '', description : 'Path to Android NDK root directory')
+
+# macOS 代码签名选项
+option('macos_codesign_identity', type : 'string', value : '', description : 'macOS code signing identity')
+
+# Windows MinGW 工具链选项
+option('mingw_prefix', type : 'string', value : '', description : 'MinGW toolchain prefix (e.g., x86_64-w64-mingw32)')
