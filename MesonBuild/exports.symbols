@@ -1,0 +1,4 @@
+# macOS 符号导出列表
+# 只导出 SQLite/SQLCipher 公共 API
+_sqlite3_*
+_sqlcipher_*

@@ -11,7 +11,14 @@ project('unity-sqlcipher-net', 'c',
 sqlite_debug = get_option('debug')
 
 # OpenSSL 依赖 (强制使用指定的 3.0.8 版本，不检查系统版本)
-openssl_subproject = subproject('openssl')
+# 为 macOS Universal Binary 构建禁用汇编优化以避免架构冲突
+openssl_options = {}
+if host_machine.system() == 'darwin'
+  # 在 macOS Universal Binary 构建中禁用汇编优化
+  openssl_options = {'asm': 'disabled'}
+endif
+
+openssl_subproject = subproject('openssl', default_options : openssl_options)
 openssl_dep = openssl_subproject.get_variable('libcrypto_dep')
 
 # 源文件路径 (现在应该是 SQLCipher 源码)
@@ -36,6 +43,9 @@ if host_machine.system() == 'windows'
   # .def 文件在 Meson 中需要直接作为源文件包含，不能作为链接参数
   # 不需要额外的链接参数，Meson 会自动处理 .def 文件
   symbol_hiding_args = []
+elif host_machine.system() == 'darwin'
+  # macOS 使用 -exported_symbols_list 来限制导出符号
+  symbol_hiding_args = ['-Wl,-exported_symbols_list,' + meson.current_source_dir() + '/exports.symbols']
 else
   # Unix-like 系统使用版本脚本隐藏符号
   symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports.map']
