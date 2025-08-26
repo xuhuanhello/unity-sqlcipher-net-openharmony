@@ -8,6 +8,11 @@ option('android_ndk_root', type : 'string', value : '', description : 'Path to A
 # macOS 代码签名选项
 option('macos_codesign_identity', type : 'string', value : '', description : 'macOS code signing identity')
 
+# iOS 构建选项
+option('ios_sdk', type : 'string', value : '', description : 'iOS SDK type (iphoneos, iphonesimulator)')
+option('ios_deployment_target', type : 'string', value : '12.0', description : 'iOS minimum deployment target')
+option('ios_codesign_identity', type : 'string', value : '', description : 'iOS code signing identity')
+
 # Windows MinGW 工具链选项
 option('mingw_prefix', type : 'string', value : '', description : 'MinGW toolchain prefix (e.g., x86_64-w64-mingw32)')
 

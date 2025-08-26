@@ -1,5 +1,6 @@
 project('unity-sqlcipher-net', 'c',
-  version : '1.0.0',
+  version : '1.2.0',
+  meson_version : '>=1.2.0',
   default_options : [
     'warning_level=1',
     'c_std=gnu99',  # 使用 GNU C99 支持汇编语法
@@ -10,12 +11,25 @@ project('unity-sqlcipher-net', 'c',
 # 构建选项
 sqlite_debug = get_option('debug')
 
+# 获取iOS SDK信息（如果是Darwin平台）
+ios_sdk = ''
+if host_machine.system() == 'darwin'
+  ios_sdk = get_option('ios_sdk')
+endif
+
 # OpenSSL 依赖 (强制使用指定的 3.0.8 版本，不检查系统版本)
-# 为 macOS Universal Binary 构建禁用汇编优化以避免架构冲突
+# 为 macOS Universal Binary 和 iOS 构建禁用汇编优化以避免架构冲突
 openssl_options = {}
 if host_machine.system() == 'darwin'
-  # 在 macOS Universal Binary 构建中禁用汇编优化
+  # 在 macOS Universal Binary 和 iOS 构建中禁用汇编优化
   openssl_options = {'asm': 'disabled'}
+  
+  # iOS平台OpenSSL使用静态库
+  if ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator'
+    openssl_options += {
+      'default_library': 'static'
+    }
+  endif
 endif
 
 openssl_subproject = subproject('openssl', default_options : openssl_options)
@@ -97,12 +111,29 @@ elif host_system == 'linux'
 
 # macOS 配置
 elif host_system == 'darwin'
-  # Universal binary (arm64 + x86_64)
-  platform_c_args += ['-arch', 'arm64', '-arch', 'x86_64']
-  platform_link_args += ['-shared', '-arch', 'arm64', '-arch', 'x86_64']
-  # 保持默认名称，Meson 会自动添加 'lib' 前缀
-  library_suffix = '.dylib'
-  install_dir = '../Plugins/lib/macos'
+  # iOS SDK 信息已在前面获取
+  if ios_sdk == 'iphoneos'
+    # iOS 设备配置 - 使用静态库，符号控制在Unity链接时处理
+    platform_c_args += ['-fPIC']
+    # iOS静态库不需要-shared链接参数
+    library_suffix = '.a'
+    library_name = 'gilzoide-sqlite-net'  # Unity DllImport使用的库名
+    install_dir = '../Plugins/lib/ios'
+  elif ios_sdk == 'iphonesimulator'
+    # iOS 模拟器配置 - 使用静态库，符号控制在Unity链接时处理
+    platform_c_args += ['-fPIC']
+    # iOS静态库不需要-shared链接参数
+    library_suffix = '.a'
+    library_name = 'gilzoide-sqlite-net'  # Unity DllImport使用的库名
+    install_dir = '../Plugins/lib/ios-simulator'
+  else
+    # macOS Universal binary (arm64 + x86_64)
+    platform_c_args += ['-arch', 'arm64', '-arch', 'x86_64']
+    platform_link_args += ['-shared', '-arch', 'arm64', '-arch', 'x86_64']
+    # 保持默认名称，Meson 会自动添加 'lib' 前缀
+    library_suffix = '.dylib'
+    install_dir = '../Plugins/lib/macos'
+  endif
 
 # Android 配置 (通过交叉编译文件处理)
 elif host_system.contains('android') or get_option('android_build')
@@ -128,7 +159,7 @@ if install_dir != ''
   run_command('mkdir', '-p', install_dir, check: false)
 endif
 
-# 构建动态库
+# 构建库 (根据平台选择静态或动态)
 library_sources = [sqlite_src]
 
 # 准备库构建的额外参数
@@ -145,38 +176,73 @@ if host_machine.system() == 'windows'
   extra_args += {'vs_module_defs' : meson.current_source_dir() + '/exports.def'}
 endif
 
-sqlite_lib = shared_library(
-  library_name,
-  library_sources,
-  kwargs : extra_args
-)
+# iOS平台构建静态库，其他平台构建动态库
+if host_system == 'darwin' and (ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator')
+  # iOS 使用静态库
+  sqlite_lib = static_library(
+    library_name,
+    library_sources,
+    kwargs : extra_args
+  )
+  
+  # 为iOS创建合并了OpenSSL的最终静态库
+  openssl_crypto_lib = openssl_subproject.get_variable('libcrypto_lib')
+  openssl_ssl_lib = openssl_subproject.get_variable('libssl_lib')
+  
+  # 创建自定义目标来合并静态库
+  merge_script = join_paths(meson.current_source_dir(), 'scripts', 'merge-static-libs.sh')
+  merged_lib_target = custom_target('merged_static_lib',
+    input : [sqlite_lib, openssl_crypto_lib, openssl_ssl_lib],
+    output : 'lib' + library_name + '_merged.a',
+    command : [merge_script, '@OUTPUT@', '@INPUT0@', '@INPUT1@', '@INPUT2@'],
+    depends : [sqlite_lib, openssl_crypto_lib, openssl_ssl_lib],
+    build_by_default : true
+  )
+  
+  # 用合并后的库替换原始库进行后续安装
+  final_lib = merged_lib_target
+else
+  # 其他平台使用动态库
+  sqlite_lib = shared_library(
+    library_name,
+    library_sources,
+    kwargs : extra_args
+  )
+  final_lib = sqlite_lib
+endif
 
 # 自定义安装目标
 if install_dir != ''
   # 获取正确的输出文件名（考虑 Meson 自动添加的前缀）
   if host_system == 'windows'
     output_filename = library_name + library_suffix
+  elif host_system == 'darwin' and (ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator')
+    # iOS 静态库，使用合并后的库文件名
+    output_filename = 'lib' + library_name + library_suffix
   else
     # Unix-like 系统，Meson 会自动添加 'lib' 前缀
     output_filename = 'lib' + library_name + library_suffix
   endif
   
+  # 根据平台选择正确的库文件进行安装
   custom_target('install_lib',
-    input : sqlite_lib,
+    input : final_lib,
     output : 'install_completed.stamp',  # 使用 stamp 文件避免文件名冲突
     command : ['cp', '@INPUT@', join_paths(meson.current_source_dir(), install_dir, output_filename)],
     build_by_default : true
   )
 endif
 
-# 代码签名 (仅 macOS)
-if host_system == 'darwin' and get_option('macos_codesign_identity') != ''
+# iOS 静态库不需要Framework打包和代码签名
+
+# macOS 代码签名
+if host_system == 'darwin' and ios_sdk == '' and get_option('macos_codesign_identity') != ''
   codesign_identity = get_option('macos_codesign_identity')
   custom_target('codesign',
-    input : sqlite_lib,
+    input : final_lib,
     output : 'codesigned.stamp',
     command : ['codesign', '-s', codesign_identity, '@INPUT@'],
-    depends : sqlite_lib,
+    depends : final_lib,
     build_by_default : true
   )
 endif

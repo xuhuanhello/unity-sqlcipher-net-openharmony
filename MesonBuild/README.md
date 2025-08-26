@@ -17,6 +17,8 @@
 | Windows | ARM64 | MinGW-w64 (ARM64) | ⚠️ 受限支持* |
 | Linux | x86_64 | GCC | ✅ 完全支持 |
 | macOS | Universal (ARM64+x86_64) | Xcode | ✅ 完全支持 |
+| iOS | ARM64 | Xcode | ✅ 完全支持 |
+| iOS Simulator | ARM64, x86_64 | Xcode | ✅ 完全支持 |
 | Android | ARM64, ARM32, x86_64, x86 | Android NDK | ✅ 完全支持 |
 
 **\* Windows ARM64 限制说明**: 大多数Linux发行版不提供ARM64 MinGW工具链，可使用Docker或CI/CD方案。
@@ -26,8 +28,9 @@
 - ✅ **SQLCipher 加密支持**：使用 OpenSSL 3.0.8 作为加密后端
 - ✅ **静态链接 OpenSSL**：避免版本冲突，确保可移植性
 - ✅ **符号隐藏**：OpenSSL 符号完全隐藏，防止与其他库冲突
+- ✅ **iOS Framework 支持**：自动打包为标准iOS Framework格式
 - ✅ **16KB 对齐支持**：Android 平台自动配置 16KB 页面对齐
-- ✅ **多平台交叉编译**：支持 Windows、Linux、macOS、Android
+- ✅ **多平台交叉编译**：支持 Windows、Linux、macOS、iOS、Android
 - ✅ **版本可控**：强制使用指定的 OpenSSL 3.0.8 版本
 
 ## 快速开始
@@ -109,20 +112,29 @@ export ANDROID_NDK_ROOT=/path/to/your/android-ndk
 # 构建 Windows x86_64 (Debug)
 ./scripts/build-platform.sh windows-x86_64 debug
 
+# 构建 iOS 设备版本
+./scripts/build-platform.sh ios-arm64
+
+# 构建 iOS 模拟器版本
+./scripts/build-platform.sh ios-simulator-arm64
+
 # 构建 Android ARM64
 ./scripts/build-platform.sh android-arm64
 ```
 
 #### 批量构建
 ```bash
-# 构建所有平台
+# 构建所有平台 (包括iOS)
 ./scripts/build-all.sh
 
-# 构建所有 Android 平台
-./scripts/build-all.sh release android
+# 构建所有 iOS 平台
+./scripts/build-all.sh ios
 
-# 构建所有 Windows 平台 (Debug 模式)
-./scripts/build-all.sh debug windows
+# 构建所有 Android 平台 (Debug模式)
+./scripts/build-all.sh android debug
+
+# 构建所有 Windows 平台 (Debug模式)
+./scripts/build-all.sh windows debug
 ```
 
 ## 手动构建
@@ -135,6 +147,15 @@ meson setup build-linux-x86_64 --cross-file=cross-files/linux-x86_64.ini
 
 # 编译
 meson compile -C build-linux-x86_64
+
+# 配置 iOS 设备构建
+meson setup build-ios-arm64 \
+    --cross-file=cross-files/ios-arm64.ini \
+    -Dios_sdk=iphoneos \
+    -Dios_deployment_target=12.0
+
+# 编译 iOS
+meson compile -C build-ios-arm64
 
 # 配置 Android ARM64 构建
 export ANDROID_NDK_ROOT=/path/to/ndk
@@ -154,14 +175,23 @@ meson compile -C build-android-arm64
 - `android_build`: 是否为 Android 平台构建 (boolean)
 - `android_abi`: Android ABI 类型 (arm64-v8a, armeabi-v7a, x86_64, x86)
 - `android_ndk_root`: Android NDK 根目录路径
+- `ios_sdk`: iOS SDK 类型 (iphoneos, iphonesimulator)
+- `ios_deployment_target`: iOS 最小部署目标 (默认: 12.0)
+- `ios_codesign_identity`: iOS 代码签名身份
 - `macos_codesign_identity`: macOS 代码签名身份
 - `mingw_prefix`: MinGW 工具链前缀
 
 使用示例：
 ```bash
+# Android 构建
 meson setup build-dir --cross-file=cross-files/android-arm64.ini \
     -Dandroid_build=true \
     -Dandroid_abi=arm64-v8a
+
+# iOS 构建
+meson setup build-dir --cross-file=cross-files/ios-arm64.ini \
+    -Dios_sdk=iphoneos \
+    -Dios_deployment_target=12.0
 ```
 
 ## 输出文件
@@ -178,6 +208,16 @@ meson setup build-dir --cross-file=cross-files/android-arm64.ini \
 │   └── x86_64/libgilzoide-sqlite-net.so
 ├── macos/
 │   └── libgilzoide-sqlite-net.dylib
+├── ios/
+│   └── CRSQLCipher.framework/          # iOS 设备版本
+│       ├── CRSQLCipher                 # ARM64 动态库
+│       ├── Info.plist                  # Framework 信息
+│       └── Headers/                    # 公共头文件
+│           ├── sqlite3.h
+│           ├── sqlite3ext.h
+│           └── module.modulemap
+├── ios-simulator/
+│   └── CRSQLCipher.framework/          # iOS 模拟器版本
 └── android/
     ├── arm64/libgilzoide-sqlite-net.so
     ├── arm32/libgilzoide-sqlite-net.so
@@ -202,14 +242,30 @@ i686-w64-mingw32-gcc --version
 aarch64-w64-mingw32-gcc --version
 ```
 
-### 3. macOS 代码签名
-如果需要代码签名，设置签名身份：
+### 3. iOS 构建问题
+确保 Xcode 和 iOS SDK 已正确安装：
 ```bash
-meson setup build-macos --cross-file=cross-files/macos-universal.ini \
-    -Dmacos_codesign_identity="Developer ID Application: Your Name"
+# 检查 Xcode 命令行工具
+xcode-select --version
+
+# 检查 iOS SDK
+xcrun --sdk iphoneos --show-sdk-path
+xcrun --sdk iphonesimulator --show-sdk-path
 ```
 
-### 4. 清理构建
+### 4. macOS/iOS 代码签名
+如果需要代码签名，设置签名身份：
+```bash
+# macOS 代码签名
+meson setup build-macos --cross-file=cross-files/macos-universal.ini \
+    -Dmacos_codesign_identity="Developer ID Application: Your Name"
+
+# iOS 代码签名
+meson setup build-ios --cross-file=cross-files/ios-arm64.ini \
+    -Dios_codesign_identity="iPhone Developer"
+```
+
+### 5. 清理构建
 ```bash
 # 清理所有构建目录
 rm -rf build-*
@@ -265,4 +321,12 @@ rm -rf build-*
 - Windows x86: `Plugins/lib/windows/x86/gilzoide-sqlite-net.dll`  
 - Linux x86_64: `Plugins/lib/linux/x86_64/libgilzoide-sqlite-net.so`
 - macOS Universal: `Plugins/lib/macos/libgilzoide-sqlite-net.dylib`
+- iOS 设备: `Plugins/lib/ios/CRSQLCipher.framework` (支持iOS 12+)
+- iOS 模拟器: `Plugins/lib/ios-simulator/CRSQLCipher.framework`
 - Android: `Plugins/lib/android/{arm64,arm32,x86_64,x86}/libgilzoide-sqlite-net.so`
+
+**iOS Framework 特点**：
+- ✅ 标准iOS Framework格式，易于Unity集成
+- ✅ 包含完整的SQLite/SQLCipher公共API头文件
+- ✅ OpenSSL 3.0.8静态链接，符号完全隐藏
+- ✅ 支持iOS 12.0+，覆盖主流设备

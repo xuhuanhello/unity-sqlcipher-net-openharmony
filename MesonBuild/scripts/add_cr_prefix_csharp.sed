@@ -1,0 +1,56 @@
+#!/usr/bin/env sed -f
+# sed script to add cr_ prefix to SQLite functions in C# DllImport attributes
+# Usage: sed -i '' -f add_cr_prefix_csharp.sed Runtime/**/*.cs
+
+# Replace DllImport EntryPoint for SQLite functions
+s/\(EntryPoint = "\)\(sqlite3_backup_finish\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_backup_init\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_backup_step\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_blob\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_double\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_int\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_int64\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_null\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_parameter_index\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_bind_text16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_busy_timeout\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_changes\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_close\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_close_v2\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_blob\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_bytes\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_bytes16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_count\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_double\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_int\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_int64\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_name\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_name16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_text\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_text16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_column_type\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_config\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_deserialize\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_enable_load_extension\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_errcode\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_errmsg16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_extended_errcode\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_finalize\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_free\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_initialize\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_last_insert_rowid\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_libversion_number\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_malloc\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_malloc64\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_open\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_open_v2\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_open16\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_prepare_v2\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_realloc\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_realloc64\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_reset\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_serialize\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_shutdown\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_step\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_threadsafe\)"/\1cr_\2"/g
+s/\(EntryPoint = "\)\(sqlite3_win32_set_directory\)"/\1cr_\2"/g

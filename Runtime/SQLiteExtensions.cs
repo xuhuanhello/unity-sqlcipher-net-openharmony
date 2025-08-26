@@ -42,31 +42,31 @@ namespace SQLite
             ReadOnly = 4,  /* Database is read-only */
         }
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_serialize", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_serialize", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr Serialize(IntPtr db, [MarshalAs(UnmanagedType.LPStr)] string zSchema, out long piSize, SerializeFlags mFlags);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_deserialize", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_deserialize", CallingConvention = CallingConvention.Cdecl)]
         public static extern Result Deserialize(IntPtr db, [MarshalAs(UnmanagedType.LPStr)] string zSchema, byte[] pData, long szDb, long szBuf, DeserializeFlags mFlags);
         
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_deserialize", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_deserialize", CallingConvention = CallingConvention.Cdecl)]
         public static unsafe extern Result Deserialize(IntPtr db, [MarshalAs(UnmanagedType.LPStr)] string zSchema, void* pData, long szDb, long szBuf, DeserializeFlags mFlags);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_malloc", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_malloc", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr Malloc(int size);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_malloc64", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_malloc64", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr Malloc(long size);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_realloc", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_realloc", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr Realloc(IntPtr ptr, int size);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_realloc64", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_realloc64", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr Realloc(IntPtr ptr, long size);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_free", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_free", CallingConvention = CallingConvention.Cdecl)]
         public static extern void Free(IntPtr ptr);
 
-        [DllImport(LibraryPath, EntryPoint = "sqlite3_column_bytes16", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(LibraryPath, EntryPoint = "cr_sqlite3_column_bytes16", CallingConvention = CallingConvention.Cdecl)]
         public static extern int ColumnBytes16(IntPtr stmt, int index);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
