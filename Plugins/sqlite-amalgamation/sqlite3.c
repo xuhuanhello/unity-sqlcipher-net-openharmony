@@ -1,4 +1,4 @@
-#include "cr_sqlite3_defines.h"
+#include "sqlite3_defines.h"
 /******************************************************************************
 ** This file is an amalgamation of many separate C source files from SQLite
 ** version 3.50.4.  By combining all the individual C code files into this

@@ -552,8 +552,18 @@ main() {
         
         if ask_install "OpenSSL wrap 配置" "cd $meson_build_dir && meson wrap install openssl && meson subprojects download"; then
             print_info "正在安装 OpenSSL wrap..."
-            if (cd "$meson_build_dir" && meson wrap install openssl); then
-                print_success "OpenSSL wrap 安装完成"
+            
+            # 执行安装命令并捕获输出
+            install_output=$(cd "$meson_build_dir" && meson wrap install openssl 2>&1)
+            install_result=$?
+            
+            # 检查是否成功安装或文件已存在
+            if [[ $install_result -eq 0 ]] || echo "$install_output" | grep -q "Wrap file already exists"; then
+                if echo "$install_output" | grep -q "Wrap file already exists"; then
+                    print_success "OpenSSL wrap 已存在，无需重新安装"
+                else
+                    print_success "OpenSSL wrap 安装完成"
+                fi
                 
                 print_info "正在下载 OpenSSL 子项目..."
                 if (cd "$meson_build_dir" && meson subprojects download openssl); then
@@ -565,6 +575,7 @@ main() {
                 fi
             else
                 print_error "OpenSSL wrap 安装失败"
+                print_error "错误信息: $install_output"
                 print_info "请手动运行: cd $meson_build_dir && meson wrap install openssl"
             fi
         fi

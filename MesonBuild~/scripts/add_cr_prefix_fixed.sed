@@ -7,6 +7,9 @@
 # Fix any existing double prefixes first
 s/cr_cr_sqlite3_/cr_sqlite3_/g
 
+# Skip #include lines - don't modify header file names in includes
+/^[[:space:]]*#[[:space:]]*include/b skip
+
 # Core idempotent replacement: only replace sqlite3_ when NOT preceded by cr_
 # This single rule handles most cases
 s/\([^c][^r][^_]\)sqlite3_/\1cr_sqlite3_/g
@@ -17,3 +20,5 @@ s/\([,;=()]\)sqlite3_/\1cr_sqlite3_/g
 # Additional specific patterns to catch edge cases
 s/\(==\)sqlite3_/\1cr_sqlite3_/g
 s/\(#define[[:space:]]\+[A-Za-z_][A-Za-z0-9_]*[[:space:]]\+\)sqlite3_/\1cr_sqlite3_/g
+
+:skip
