@@ -79,7 +79,7 @@ if [[ -f "$EXPORTS_FILE" ]]; then
         "scripts/unity_symbols_exports.txt" \
         "../scripts/unity_symbols_exports.txt" \
         "$(dirname "$0")/unity_symbols_exports.txt" \
-        "/Users/xsmxu/Projects/sqlcipher-oh/unity-sqlcipher-net-openharmony/MesonBuild/scripts/unity_symbols_exports.txt"; do
+        "/Users/xsmxu/Projects/sqlcipher-oh/unity-sqlcipher-net-openharmony/MesonBuild~/scripts/unity_symbols_exports.txt"; do
         if [[ -f "$possible_path" ]]; then
             UNITY_SYMBOLS_FILE="$possible_path"
             break

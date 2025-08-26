@@ -209,15 +209,7 @@ meson setup build-dir --cross-file=cross-files/ios-arm64.ini \
 ├── macos/
 │   └── libgilzoide-sqlite-net.dylib
 ├── ios/
-│   └── CRSQLCipher.framework/          # iOS 设备版本
-│       ├── CRSQLCipher                 # ARM64 动态库
-│       ├── Info.plist                  # Framework 信息
-│       └── Headers/                    # 公共头文件
-│           ├── sqlite3.h
-│           ├── sqlite3ext.h
-│           └── module.modulemap
-├── ios-simulator/
-│   └── CRSQLCipher.framework/          # iOS 模拟器版本
+│   └── libgilzoide-sqlite-net.a        # iOS 静态库 (ARM64)
 └── android/
     ├── arm64/libgilzoide-sqlite-net.so
     ├── arm32/libgilzoide-sqlite-net.so
@@ -282,6 +274,258 @@ rm -rf build-*
 | IDE 集成 | 无 | 支持多种 IDE |
 | 配置缓存 | 无 | 自动缓存 |
 
+## 脚本详细说明
+
+`scripts/` 目录包含了所有构建和配置相关的脚本。以下是各脚本的详细说明：
+
+### 构建脚本
+
+#### `build-platform.sh` - 单平台构建
+**用途**: 构建指定单个平台的SQLCipher库
+**语法**: `./build-platform.sh <platform> [build_type]`
+**参数**:
+- `platform`: 目标平台 (linux-x86_64, windows-x86_64, ios-arm64, android-arm64 等)
+- `build_type`: 构建类型，可选 (release/debug，默认：release)
+
+**使用示例**:
+```bash
+# 构建iOS ARM64版本
+./build-platform.sh ios-arm64
+
+# 构建Windows x86_64 Debug版本
+./build-platform.sh windows-x86_64 debug
+
+# 构建Android ARM64版本
+./build-platform.sh android-arm64
+```
+
+**依赖关系**: 
+- 依赖: `check-env.sh` (可选，用于环境检查)
+- 依赖: 对应平台的交叉编译工具链
+- 被依赖: `build-all.sh`
+
+#### `build-all.sh` - 批量构建
+**用途**: 批量构建多个平台的SQLCipher库
+**语法**: `./build-all.sh [platform_filter] [build_type]`
+**参数**:
+- `platform_filter`: 平台过滤器，可选 (ios/android/windows/linux，默认：全部)
+- `build_type`: 构建类型，可选 (release/debug，默认：release)
+
+**使用示例**:
+```bash
+# 构建所有平台
+./build-all.sh
+
+# 只构建iOS相关平台
+./build-all.sh ios
+
+# 构建所有Android平台的Debug版本
+./build-all.sh android debug
+
+# 构建所有Windows平台
+./build-all.sh windows
+```
+
+**依赖关系**:
+- 依赖: `build-platform.sh`
+
+#### ~~`create-ios-framework.sh`~~ - iOS Framework打包（已废弃）
+**状态**: ⚠️ **已废弃** - iOS不允许Unity使用动态库
+**原因**: Unity在iOS平台只支持静态库（.a文件），不支持Framework（动态库）
+**替代方案**: 直接使用`build-platform.sh`生成的静态库文件
+
+### 环境配置脚本
+
+#### `check-env.sh` - 环境检查
+**用途**: 检查构建环境是否完备，自动安装缺失的依赖
+**语法**: `./check-env.sh [platform]`
+**参数**:
+- `platform`: 要检查的特定平台，可选 (不指定则检查所有)
+
+**功能**:
+- 🔍 检查基础构建工具 (meson, ninja, build-essential)
+- 🔍 检查交叉编译工具链 (mingw, Android NDK, Xcode)
+- 📦 自动提示安装命令
+- ⚙️ 自动设置环境变量
+- 🖥️ 支持 Linux 和 macOS 系统
+- ⚠️ 提供Windows ARM64限制说明
+
+**使用示例**:
+```bash
+# 检查所有平台的构建环境
+./check-env.sh
+
+# 只检查Android构建环境
+./check-env.sh android
+
+# 只检查iOS构建环境  
+./check-env.sh ios
+```
+
+**依赖关系**:
+- 无依赖
+- 被依赖: 推荐在所有构建前运行
+
+#### `clean-builds.sh` - 清理构建
+**用途**: 清理构建目录和产物，释放磁盘空间
+**语法**: `./clean-builds.sh [options]`
+
+**功能**:
+- 🧹 清理所有 `build-*` 目录
+- 🧹 清理生成的库文件
+- 🧹 清理临时文件
+- 📊 显示清理前后的磁盘使用情况
+- ⚠️ 支持交互式确认模式
+
+**使用示例**:
+```bash
+# 清理所有构建文件
+./clean-builds.sh
+
+# 静默清理（不询问确认）
+./clean-builds.sh --force
+```
+
+**依赖关系**:
+- 无依赖
+- 与所有构建脚本无冲突
+
+### 符号处理脚本
+
+#### `apply_prefix.sh` - 符号前缀应用
+**用途**: 为SQLite函数添加`cr_`前缀，避免符号冲突
+**语法**: `./apply_prefix.sh`
+
+**功能**:
+- 🔧 修改`sqlite3.c`和`sqlite3.h`中的函数名
+- 🔧 同步更新C# DllImport中的EntryPoint
+- 🔄 幂等操作，可安全重复运行
+- ✅ 处理52个Unity需要的SQLite函数
+
+**使用示例**:
+```bash
+# 应用cr_前缀到SQLite函数
+./apply_prefix.sh
+```
+
+**依赖关系**:
+- 依赖: `add_cr_prefix_fixed.sed`, `add_cr_prefix_csharp.sed`
+- 被依赖: 在构建前需要执行以避免符号冲突
+
+#### `extract-unity-symbols.sh` - Unity符号提取
+**用途**: 从构建产物中提取Unity需要的符号列表
+**语法**: `./extract-unity-symbols.sh [platform]`
+
+**功能**:
+- 🔍 分析构建后的静态库
+- 📋 提取实际导出的符号
+- ✅ 验证与`unity_symbols_exports.txt`的一致性
+- 📊 生成符号报告
+
+**使用示例**:
+```bash
+# 提取iOS平台的符号
+./extract-unity-symbols.sh ios-arm64
+
+# 提取所有平台的符号
+./extract-unity-symbols.sh
+```
+
+**依赖关系**:
+- 依赖: 对应平台的构建产物
+- 依赖: `unity_required_symbols.txt`
+
+#### `merge-static-libs.sh` - 静态库合并
+**用途**: 合并SQLCipher和OpenSSL静态库，隐藏OpenSSL符号
+**语法**: `./merge-static-libs.sh <input_lib> <output_lib>`
+
+**功能**:
+- 🔗 合并多个静态库为单一库文件
+- 🔒 隐藏OpenSSL符号，只导出SQLite符号
+- 📊 符号统计和验证
+- ✅ 确保Unity所需的50+个符号正确导出
+
+**使用示例**:
+```bash
+# 合并iOS静态库
+./merge-static-libs.sh build-ios-arm64/libsqlcipher.a ../Plugins/lib/ios/libgilzoide-sqlite-net.a
+```
+
+**依赖关系**:
+- 依赖: `unity_symbols_exports.txt`
+- 被依赖: `build-platform.sh` (自动调用)
+
+### 配置文件
+
+#### `unity_required_symbols.txt` - Unity需要的符号列表
+**用途**: 定义Unity SQLCipher.NET需要的52个SQLite函数
+**格式**: 每行一个函数名（原始名称，不含前缀）
+```
+sqlite3_threadsafe
+sqlite3_open
+sqlite3_close
+...
+```
+
+#### `unity_symbols_exports.txt` - 导出符号列表
+**用途**: 定义实际导出的符号列表（包含平台前缀）
+**格式**: 每行一个符号名（包含下划线前缀和cr_前缀）
+```
+_cr_sqlite3_threadsafe
+_cr_sqlite3_open
+_cr_sqlite3_close
+...
+```
+
+#### `add_cr_prefix_fixed.sed` - SQLite函数前缀处理
+**用途**: 幂等的sed脚本，为SQLite函数添加`cr_`前缀
+**特点**:
+- ✅ 幂等操作，可安全重复运行
+- ✅ 处理所有上下文（函数声明、调用、宏定义等）
+- ✅ 自动修复双重前缀问题
+
+#### `add_cr_prefix_csharp.sed` - C# DllImport处理
+**用途**: 同步更新C#代码中的DllImport EntryPoint
+**功能**: 将`EntryPoint = "sqlite3_xxx"`替换为`EntryPoint = "cr_sqlite3_xxx"`
+
+### 脚本依赖关系图
+
+```
+check-env.sh (推荐首先运行)
+    ↓
+apply_prefix.sh (构建前运行)
+    ↓
+build-platform.sh ────→ build-all.sh
+    ↓                        ↓
+merge-static-libs.sh         ↓
+    ↓                        ↓
+extract-unity-symbols.sh     ↓
+                             ↓
+clean-builds.sh (可选，清理时使用)
+```
+
+### 最佳实践工作流
+
+```bash
+# 1. 环境检查（首次运行或切换开发环境时）
+./scripts/check-env.sh
+
+# 2. 应用符号前缀（避免冲突）
+./scripts/apply_prefix.sh
+
+# 3. 构建目标平台
+./scripts/build-platform.sh ios-arm64
+
+# 或者批量构建
+./scripts/build-all.sh
+
+# 4. 验证符号导出（可选）
+./scripts/extract-unity-symbols.sh ios-arm64
+
+# 5. 清理构建文件（可选）
+./scripts/clean-builds.sh
+```
+
 ## 贡献
 
 如需添加新平台支持或改进构建配置，请：
@@ -321,12 +565,11 @@ rm -rf build-*
 - Windows x86: `Plugins/lib/windows/x86/gilzoide-sqlite-net.dll`  
 - Linux x86_64: `Plugins/lib/linux/x86_64/libgilzoide-sqlite-net.so`
 - macOS Universal: `Plugins/lib/macos/libgilzoide-sqlite-net.dylib`
-- iOS 设备: `Plugins/lib/ios/CRSQLCipher.framework` (支持iOS 12+)
-- iOS 模拟器: `Plugins/lib/ios-simulator/CRSQLCipher.framework`
+- iOS: `Plugins/lib/ios/libgilzoide-sqlite-net.a` (ARM64静态库，支持iOS 12+)
 - Android: `Plugins/lib/android/{arm64,arm32,x86_64,x86}/libgilzoide-sqlite-net.so`
 
-**iOS Framework 特点**：
-- ✅ 标准iOS Framework格式，易于Unity集成
-- ✅ 包含完整的SQLite/SQLCipher公共API头文件
+**iOS 静态库特点**：
+- ✅ 标准静态库格式，符合Unity iOS构建要求
 - ✅ OpenSSL 3.0.8静态链接，符号完全隐藏
 - ✅ 支持iOS 12.0+，覆盖主流设备
+- ✅ 只导出Unity需要的SQLite函数，避免符号冲突

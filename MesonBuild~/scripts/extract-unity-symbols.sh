@@ -58,8 +58,8 @@ cat "$OUTPUT_FILE"
 # 与原始SQLite库对比
 echo ""
 echo "📊 与原始SQLite库对比:"
-if [[ -d "$PROJECT_ROOT/MesonBuild/build-ios-arm64" ]]; then
-    SQLITE_OBJ=$(find "$PROJECT_ROOT/MesonBuild/build-ios-arm64" -name "*.o" -path "*sqlite-amalgamation*" | head -1)
+if [[ -d "$PROJECT_ROOT/MesonBuild~/build-ios-arm64" ]]; then
+    SQLITE_OBJ=$(find "$PROJECT_ROOT/MesonBuild~/build-ios-arm64" -name "*.o" -path "*sqlite-amalgamation*" | head -1)
     if [[ -f "$SQLITE_OBJ" ]]; then
         ORIGINAL_COUNT=$(nm "$SQLITE_OBJ" 2>/dev/null | grep "T _sqlite3_" | wc -l)
         echo "  Unity需要: $TOTAL_SYMBOLS 个符号"

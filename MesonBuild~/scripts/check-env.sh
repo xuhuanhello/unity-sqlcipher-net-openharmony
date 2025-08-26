@@ -259,7 +259,7 @@ suggest_arm64_mingw_alternatives() {
         echo "🐳 Docker方案 (推荐):"
         echo "   # 从项目根目录运行（挂载整个项目）"
         echo "   cd .. && docker run --rm -v \$(pwd):/workspace dockcross/windows-arm64 bash -c \\"
-        echo "     \\\"cd /workspace/MesonBuild && ./scripts/build-platform.sh windows-arm64\\\""
+        echo "     \\\"cd /workspace/MesonBuild~ && ./scripts/build-platform.sh windows-arm64\\\""
         echo ""
         echo "   # 或创建自定义Dockerfile:"
         echo "   # FROM ubuntu:24.04"
@@ -508,10 +508,24 @@ main() {
     print_info "检查 Meson 子项目依赖..."
     
     # 检查 OpenSSL wrap 配置
-    # 获取脚本所在目录，然后找到MesonBuild根目录
+    # 获取脚本所在目录，然后找到MesonBuild~根目录
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     meson_build_dir="$(dirname "$script_dir")"
-    openssl_wrap_file="$meson_build_dir/subprojects/openssl.wrap"
+    subprojects_dir="$meson_build_dir/subprojects"
+    openssl_wrap_file="$subprojects_dir/openssl.wrap"
+    
+    # 确保 subprojects 目录存在
+    if [[ ! -d "$subprojects_dir" ]]; then
+        print_info "创建 subprojects 目录: $subprojects_dir"
+        mkdir -p "$subprojects_dir"
+        if [[ $? -eq 0 ]]; then
+            print_success "subprojects 目录创建成功"
+        else
+            print_error "subprojects 目录创建失败"
+            FAILED_CHECKS+=("subprojects 目录")
+            return 1
+        fi
+    fi
     
     if [[ -f "$openssl_wrap_file" ]]; then
         openssl_version=$(grep 'wrapdb_version' "$openssl_wrap_file" | cut -d'=' -f2 | tr -d ' ')
@@ -533,7 +547,7 @@ main() {
         
         echo ""
         print_info "OpenSSL wrap 配置文件不存在，需要安装依赖"
-        print_info "将在MesonBuild目录安装: $meson_build_dir"
+        print_info "将在MesonBuild~目录安装: $meson_build_dir"
         echo ""
         
         if ask_install "OpenSSL wrap 配置" "cd $meson_build_dir && meson wrap install openssl && meson subprojects download"; then
