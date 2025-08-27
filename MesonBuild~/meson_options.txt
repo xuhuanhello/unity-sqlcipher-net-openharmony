@@ -5,6 +5,12 @@ option('android_build', type : 'boolean', value : false, description : 'Build fo
 option('android_abi', type : 'combo', choices : ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'], value : 'arm64-v8a', description : 'Android ABI to build for')
 option('android_ndk_root', type : 'string', value : '', description : 'Path to Android NDK root directory')
 
+# HarmonyOS 构建相关选项
+option('harmony_build', type : 'boolean', value : false, description : 'Build for HarmonyOS platform')
+option('harmony_abi', type : 'combo', choices : ['arm64-v8a'], value : 'arm64-v8a', description : 'HarmonyOS ABI to build for')
+option('harmony_stl', type : 'combo', choices : ['c++_shared', 'c++_static'], value : 'c++_shared', description : 'HarmonyOS STL library type')
+option('ohos_ndk_root', type : 'string', value : '', description : 'Path to HarmonyOS NDK root directory')
+
 # macOS 代码签名选项
 option('macos_codesign_identity', type : 'string', value : '', description : 'macOS code signing identity')
 

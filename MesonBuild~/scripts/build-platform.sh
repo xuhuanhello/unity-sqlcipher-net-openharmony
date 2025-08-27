@@ -45,6 +45,7 @@ if [[ -z "$PLATFORM" || "$PLATFORM" == "-h" || "$PLATFORM" == "--help" ]]; then
     echo "  android-arm32         - Android ARM32"
     echo "  android-x86_64        - Android x86_64"
     echo "  android-x86           - Android x86"
+    echo "  harmony-arm64         - HarmonyOS ARM64"
     echo ""
     echo "Docker构建平台 (添加 -docker 后缀):"
     echo "  windows-x86_64-docker        - Windows 64位 (Docker)"
@@ -310,6 +311,55 @@ else
     PLATFORM_OPTIONS=""
 fi
 
+# 检查 HarmonyOS NDK (如果构建 HarmonyOS 平台)
+if [[ "$PLATFORM" == harmony-* ]]; then
+    if [[ -z "$OHOS_NDK_ROOT" ]]; then
+        echo "错误: 构建 HarmonyOS 平台需要设置 OHOS_NDK_ROOT 环境变量"
+        echo "请从以下地址下载 HarmonyOS SDK:"
+        echo "https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz"
+        exit 1
+    fi
+    
+    # 替换交叉编译文件中的环境变量
+    TEMP_CROSS_FILE="/tmp/harmony-cross-$PLATFORM.ini"
+    sed "s|\$OHOS_NDK_ROOT|$OHOS_NDK_ROOT|g" "$CROSS_FILE" > "$TEMP_CROSS_FILE"
+    CROSS_FILE="$TEMP_CROSS_FILE"
+    
+    # 设置 HarmonyOS ABI 和 STL
+    case "$PLATFORM" in
+        harmony-arm64)   HARMONY_ABI="arm64-v8a" ;;
+    esac
+    
+    # 默认使用 c++_shared STL (对应官方 CMake 示例中的 OHOS_STL=c++_shared)
+    HARMONY_STL="c++_shared"
+    
+    # 自动修复 OpenSSL 子项目对 HarmonyOS 的支持
+    echo "🔧 正在修复 OpenSSL 子项目对 HarmonyOS 的支持..."
+    OPENSSL_MESON_FILE="subprojects/openssl-3.0.8/meson.build"
+    if [[ -f "$OPENSSL_MESON_FILE" ]]; then
+        # 检查是否已经包含 harmony 支持
+        if ! grep -q "is_linux = host_machine.system() in \['linux', 'android', 'harmony'\]" "$OPENSSL_MESON_FILE"; then
+            # 备份原文件
+            cp "$OPENSSL_MESON_FILE" "$OPENSSL_MESON_FILE.backup"
+            echo "📄 已备份原始文件: $OPENSSL_MESON_FILE.backup"
+            
+            # 应用修复
+            sed -i.tmp "s/is_linux = host_machine.system() in \['linux', 'android'\]/is_linux = host_machine.system() in ['linux', 'android', 'harmony']/" "$OPENSSL_MESON_FILE"
+            rm -f "$OPENSSL_MESON_FILE.tmp"
+            
+            echo "✅ OpenSSL 子项目已修复，现在支持 HarmonyOS"
+        else
+            echo "✅ OpenSSL 子项目已经支持 HarmonyOS，无需修复"
+        fi
+    else
+        echo "⚠️  OpenSSL 子项目文件不存在: $OPENSSL_MESON_FILE"
+        echo "   这可能是首次构建，Meson 会自动下载子项目"
+    fi
+    
+    HARMONY_OPTIONS="-Dharmony_build=true -Dharmony_abi=$HARMONY_ABI -Dharmony_stl=$HARMONY_STL"
+    PLATFORM_OPTIONS="$HARMONY_OPTIONS"
+fi
+
 # 检查 iOS 平台
 if [[ "$PLATFORM" == ios-* ]]; then
     # 设置 iOS SDK 类型
@@ -342,6 +392,10 @@ meson compile -C "$BUILD_DIR"
 
 # 清理临时文件
 if [[ "$PLATFORM" == android-* && -f "$TEMP_CROSS_FILE" ]]; then
+    rm -f "$TEMP_CROSS_FILE"
+fi
+
+if [[ "$PLATFORM" == harmony-* && -f "$TEMP_CROSS_FILE" ]]; then
     rm -f "$TEMP_CROSS_FILE"
 fi
 

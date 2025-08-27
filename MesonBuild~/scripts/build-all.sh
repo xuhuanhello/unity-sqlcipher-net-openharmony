@@ -27,6 +27,7 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "  linux       - Linux 平台"
     echo "  macos       - macOS 平台"
     echo "  ios         - iOS 平台"
+    echo "  harmony     - HarmonyOS 平台"
     echo ""
     echo "Docker平台组 (需要Docker环境):"
     echo "  all-docker     - 所有支持Docker的平台"
@@ -60,6 +61,7 @@ ALL_PLATFORMS=(
     "android-arm32"
     "android-x86_64"
     "android-x86"
+    "harmony-arm64"
 )
 
 ANDROID_PLATFORMS=(
@@ -87,6 +89,10 @@ IOS_PLATFORMS=(
     "ios-arm64"
     "ios-simulator-arm64"
     "ios-simulator-x86_64"
+)
+
+HARMONY_PLATFORMS=(
+    "harmony-arm64"
 )
 
 # Docker平台组
@@ -138,6 +144,9 @@ case "$PLATFORM_GROUP" in
     "ios")
         PLATFORMS=("${IOS_PLATFORMS[@]}")
         ;;
+    "harmony")
+        PLATFORMS=("${HARMONY_PLATFORMS[@]}")
+        ;;
     "all-docker")
         PLATFORMS=("${ALL_DOCKER_PLATFORMS[@]}")
         ;;
@@ -162,6 +171,7 @@ case "$PLATFORM_GROUP" in
         echo "  linux          - Linux 平台"
         echo "  macos          - macOS 平台"
         echo "  ios            - iOS 平台"
+        echo "  harmony        - HarmonyOS 平台"
         echo "  all-docker     - 所有Docker平台"
         echo "  android-docker - Android 平台 (Docker)"
         echo "  windows-docker - Windows 平台 (Docker)"

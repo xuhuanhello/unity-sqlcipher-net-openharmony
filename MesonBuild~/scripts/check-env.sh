@@ -44,9 +44,24 @@ ask_install() {
     local tool_name="$1"
     local install_cmd="$2"
     
-    echo ""
-    read -p "是否要安装 $tool_name? [y/N]: " -n 1 -r
-    echo ""
+    # 检查是否在交互模式
+    if [[ -t 0 ]]; then
+        # 交互模式：无超时等待用户输入
+        echo ""
+        read -p "是否要安装 $tool_name? [y/N]: " -r
+        echo ""
+    else
+        # 非交互模式：直接使用默认值
+        print_info "非交互模式，使用默认选择: 不安装 $tool_name"
+        return 1
+    fi
+    
+    # 如果输入为空，默认为 N
+    if [[ -z "$REPLY" ]]; then
+        print_info "使用默认选择: 不安装 $tool_name"
+        return 1
+    fi
+    
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "正在安装 $tool_name..."
         eval "$install_cmd"
@@ -174,10 +189,24 @@ check_env_var() {
     FAILED_CHECKS+=("$var_description")
     
     if [[ -n "$default_path" && -d "$default_path" ]]; then
-        echo ""
-        read -p "是否设置 $var_name 为默认路径 $default_path? [y/N]: " -n 1 -r
-        echo ""
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # 检查是否在交互模式
+        if [[ -t 0 ]]; then
+            # 交互模式：无超时等待用户输入
+            echo ""
+            read -p "是否设置 $var_name 为默认路径 $default_path? [y/N]: " -r
+            echo ""
+        else
+            # 非交互模式：直接使用默认值
+            print_info "非交互模式，使用默认选择: 不自动设置环境变量"
+            print_info "如需使用，请手动执行: export $var_name=\"$default_path\""
+            return 1
+        fi
+        
+        # 如果输入为空，默认为 N
+        if [[ -z "$REPLY" ]]; then
+            print_info "使用默认选择: 不自动设置环境变量"
+            print_info "如需使用，请手动执行: export $var_name=\"$default_path\""
+        elif [[ $REPLY =~ ^[Yy]$ ]]; then
             # 添加到 ~/.bashrc 和 ~/.profile
             echo "export $var_name=\"$default_path\"" >> ~/.bashrc
             if [[ -f ~/.profile ]]; then
@@ -188,6 +217,9 @@ check_env_var() {
             print_info "请重新加载 shell 或执行: source ~/.bashrc"
             PASSED_CHECKS=$((PASSED_CHECKS + 1))
             return 0
+        else
+            print_info "跳过自动设置"
+            print_info "如需使用，请手动执行: export $var_name=\"$default_path\""
         fi
     fi
     
@@ -1436,7 +1468,16 @@ check_android_ndk() {
         fi
     done
     
-    check_env_var "ANDROID_NDK_ROOT" "Android NDK" "$found_ndk" true
+    # 简化 Android NDK 检查，避免交互阻塞
+    if [[ -n "$ANDROID_NDK_ROOT" && -d "$ANDROID_NDK_ROOT" ]]; then
+        print_success "Android NDK 已设置: $ANDROID_NDK_ROOT"
+    elif [[ -n "$found_ndk" ]]; then
+        print_warning "找到 Android NDK 但环境变量未设置: $found_ndk"
+        print_info "请手动执行: export ANDROID_NDK_ROOT=\"$found_ndk\""
+    else
+        print_error "Android NDK 未设置"
+        print_info "请下载并安装 Android NDK: https://developer.android.com/ndk/downloads"
+    fi
     
     # 检查 NDK 工具链
     if [[ -n "$ANDROID_NDK_ROOT" && -d "$ANDROID_NDK_ROOT" ]]; then
@@ -1449,6 +1490,355 @@ check_android_ndk() {
             print_success "Android NDK 工具链找到: $toolchain_dir"
         else
             print_error "Android NDK 工具链目录不存在: $toolchain_dir"
+        fi
+    fi
+    print_info "check_android_ndk 函数执行完成"
+}
+
+# 获取系统架构信息用于下载正确的 HarmonyOS SDK
+get_harmony_sdk_info() {
+    local os_type=""
+    local arch=""
+    local download_url=""
+    local filename=""
+    local sha256=""
+    local size=""
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS 系统
+        local mac_arch=$(detect_mac_arch)
+        if [[ "$mac_arch" == "arm64" ]]; then
+            # Apple Silicon Mac
+            os_type="Mac-M1"
+            download_url="https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz"
+            filename="L2-SDK-MAC-M1-PUBLIC.tar.gz"
+            size="1.2 GB"
+        else
+            # Intel Mac
+            os_type="Mac"
+            download_url="https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-PUBLIC.tar.gz"
+            filename="L2-SDK-MAC-PUBLIC.tar.gz"
+            size="1.3 GB"
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux 系统
+        os_type="Linux"
+        download_url="https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz"
+        filename="L2-SDK-LINUX-PUBLIC.tar.gz"
+        size="3.2 GB"
+    elif [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* ]]; then
+        # Windows 系统
+        os_type="Windows"
+        download_url="https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-WINDOWS-PUBLIC.tar.gz"
+        filename="L2-SDK-WINDOWS-PUBLIC.tar.gz"
+        size="3.2 GB"
+    else
+        print_error "不支持的操作系统: $OSTYPE"
+        return 1
+    fi
+    
+    echo "$os_type|$download_url|$filename|$size"
+}
+
+# 安装 HarmonyOS SDK
+install_harmony_sdk() {
+    local sdk_info
+    sdk_info=$(get_harmony_sdk_info)
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+    
+    IFS='|' read -r os_type download_url filename size <<< "$sdk_info"
+    
+    print_info "准备安装 HarmonyOS SDK for $os_type"
+    print_info "文件大小: $size"
+    print_info "下载地址: $download_url"
+    
+    # 设置默认安装路径
+    local default_install_path="/opt/ohos-sdk/5.1.0"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        default_install_path="/opt/ohos-sdk/5.1.0"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        default_install_path="/opt/ohos-sdk/5.1.0"
+    fi
+    
+    echo ""
+    print_info "默认安装路径: $default_install_path"
+    read -p "是否使用默认路径? 或输入自定义路径 [回车使用默认]: " custom_path
+    
+    if [[ -n "$custom_path" ]]; then
+        default_install_path="$custom_path"
+    fi
+    
+    # 创建安装目录
+    print_info "创建安装目录: $default_install_path"
+    if ! sudo mkdir -p "$default_install_path"; then
+        print_error "无法创建安装目录: $default_install_path"
+        print_info "请检查权限或选择其他路径"
+        return 1
+    fi
+    
+    # 创建临时下载目录
+    local temp_dir=$(mktemp -d)
+    local download_file="$temp_dir/$filename"
+    
+    print_info "开始下载 HarmonyOS SDK..."
+    print_info "这可能需要较长时间，请保持网络连接稳定"
+    
+    # 下载文件，显示进度
+    if command -v curl >/dev/null 2>&1; then
+        if curl -L --progress-bar -o "$download_file" "$download_url"; then
+            print_success "下载完成"
+        else
+            print_error "下载失败"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget --progress=bar:force:noscroll -O "$download_file" "$download_url"; then
+            print_success "下载完成"
+        else
+            print_error "下载失败"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+    else
+        print_error "需要 curl 或 wget 来下载文件"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # 验证下载文件
+    if [[ ! -f "$download_file" ]]; then
+        print_error "下载的文件不存在"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    local file_size=$(du -h "$download_file" | cut -f1)
+    print_info "下载文件大小: $file_size"
+    
+    # 解压文件
+    print_info "解压 HarmonyOS SDK 到 $default_install_path..."
+    if sudo tar -xzf "$download_file" -C "$default_install_path" --strip-components=1; then
+        print_success "解压完成"
+    else
+        print_error "解压失败"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # 设置权限
+    print_info "设置文件权限..."
+    sudo chown -R "$USER:$(id -gn)" "$default_install_path" 2>/dev/null || true
+    sudo chmod -R 755 "$default_install_path" 2>/dev/null || true
+    
+    # 清理临时文件
+    rm -rf "$temp_dir"
+    
+    # 解压 native SDK zip 文件
+    print_info "解压 native SDK 组件..."
+    local native_zip_path=""
+    local darwin_path="$default_install_path/packages/ohos-sdk/darwin"
+    
+    if [[ -d "$darwin_path" ]]; then
+        native_zip_path=$(find "$darwin_path" -name "native-darwin-*-Release.zip" | head -1)
+        if [[ -n "$native_zip_path" && -f "$native_zip_path" ]]; then
+            print_info "找到 native SDK: $(basename "$native_zip_path")"
+            
+            # 解压到 native 目录
+            local native_dir="$default_install_path/native"
+            sudo mkdir -p "$native_dir"
+            
+            if sudo unzip -q "$native_zip_path" -d "$native_dir"; then
+                print_success "native SDK 解压完成"
+                
+                # 设置权限
+                sudo chown -R "$USER:$(id -gn)" "$native_dir" 2>/dev/null || true
+                sudo chmod -R 755 "$native_dir" 2>/dev/null || true
+            else
+                print_error "native SDK 解压失败"
+                return 1
+            fi
+        else
+            print_error "未找到 native SDK zip 文件"
+            return 1
+        fi
+    else
+        print_error "未找到 darwin SDK 目录"
+        return 1
+    fi
+    
+    # 设置环境变量 - 使用正确的嵌套路径结构
+    local ndk_path="$default_install_path/native/native"
+    if [[ -d "$ndk_path" ]]; then
+        print_info "设置环境变量..."
+        
+        # 按照官方文档添加到 .bash_profile
+        local profile_config="$HOME/.bash_profile"
+        
+        if ! grep -q "OHOS_NDK_ROOT" "$profile_config" 2>/dev/null; then
+            echo "" >> "$profile_config"
+            echo "# HarmonyOS SDK 环境变量" >> "$profile_config"
+            echo "export PATH=\"$ndk_path/build-tools/cmake/bin:\$PATH\"" >> "$profile_config"
+            echo "export OHOS_NDK_ROOT=\"$ndk_path\"" >> "$profile_config"
+            print_success "已添加环境变量到 $profile_config"
+        else
+            print_info "环境变量已存在于 $profile_config"
+        fi
+        
+        # 设置当前会话的环境变量
+        export OHOS_NDK_ROOT="$ndk_path"
+        export PATH="$OHOS_NDK_ROOT/llvm/bin:$PATH"
+        
+        print_success "HarmonyOS SDK 安装完成！"
+        print_info "安装路径: $default_install_path"
+        print_info "NDK 路径: $ndk_path"
+        print_info "请重启终端或执行: source ~/.bashrc"
+        
+        return 0
+    else
+        print_error "安装完成但未找到 native 目录"
+        print_error "请检查安装路径: $default_install_path"
+        return 1
+    fi
+}
+
+# 检查 HarmonyOS SDK
+check_harmony_sdk() {
+    print_info "检查 HarmonyOS SDK..."
+    
+    # 检查 OHOS_NDK_ROOT 环境变量 - 使用正确的嵌套路径
+    local default_sdk_paths=(
+        "/opt/ohos-sdk/5.1.0/native/native"
+        "/opt/ohos-sdk/native/native"
+        "$HOME/ohos-sdk/5.1.0/native/native"
+        "$HOME/ohos-sdk/native/native"
+        "/usr/local/ohos-sdk/native/native"
+    )
+    
+    local found_sdk=""
+    for path in "${default_sdk_paths[@]}"; do
+        if [[ -d "$path" ]]; then
+            found_sdk="$path"
+            break
+        fi
+    done
+    
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+    
+    if [[ -n "$OHOS_NDK_ROOT" && -d "$OHOS_NDK_ROOT" ]]; then
+        print_success "HarmonyOS NDK 路径已设置: $OHOS_NDK_ROOT"
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        
+        # 检查关键工具链文件
+        local tools=(
+            "$OHOS_NDK_ROOT/llvm/bin/clang"
+            "$OHOS_NDK_ROOT/llvm/bin/clang++"
+            "$OHOS_NDK_ROOT/llvm/bin/llvm-ar"
+            "$OHOS_NDK_ROOT/llvm/bin/llvm-strip"
+            "$OHOS_NDK_ROOT/sysroot"
+        )
+        
+        local missing_tools=()
+        for tool in "${tools[@]}"; do
+            if [[ ! -e "$tool" ]]; then
+                missing_tools+=("$(basename "$tool")")
+            fi
+        done
+        
+        if [[ ${#missing_tools[@]} -eq 0 ]]; then
+            print_success "HarmonyOS NDK 工具链完整"
+            
+            # 显示工具链版本信息
+            if [[ -x "$OHOS_NDK_ROOT/llvm/bin/clang" ]]; then
+                local clang_version=$("$OHOS_NDK_ROOT/llvm/bin/clang" --version 2>/dev/null | head -n1 || echo "未知版本")
+                print_info "Clang 版本: $clang_version"
+            fi
+            
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        else
+            print_error "HarmonyOS NDK 工具链不完整，缺少: ${missing_tools[*]}"
+            FAILED_CHECKS+=("HarmonyOS NDK 工具链")
+        fi
+        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+        
+    elif [[ -n "$found_sdk" ]]; then
+        print_warning "找到 HarmonyOS SDK 但环境变量未设置: $found_sdk"
+        print_info "建议设置环境变量: export OHOS_NDK_ROOT=\"$found_sdk\""
+        
+        # 检查是否在交互模式
+        if [[ -t 0 ]]; then
+            # 交互模式：无超时等待用户输入
+            echo ""
+            read -p "是否自动设置 OHOS_NDK_ROOT 环境变量? [y/N]: " -r
+            echo
+        else
+            # 非交互模式：直接使用默认值
+            print_info "非交互模式，使用默认选择: 不自动设置环境变量"
+            REPLY="n"
+        fi
+        
+        # 如果输入为空，默认为 N
+        if [[ -z "$REPLY" ]]; then
+            print_info "使用默认选择: 不自动设置环境变量"
+            REPLY="n"
+        fi
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # 添加到配置文件
+            local shell_configs=()
+            if [[ -f "$HOME/.bashrc" ]]; then
+                shell_configs+=("$HOME/.bashrc")
+            fi
+            if [[ -f "$HOME/.zshrc" ]]; then
+                shell_configs+=("$HOME/.zshrc")
+            fi
+            
+            for config in "${shell_configs[@]}"; do
+                if ! grep -q "OHOS_NDK_ROOT" "$config" 2>/dev/null; then
+                    echo "" >> "$config"
+                    echo "# HarmonyOS SDK 环境变量" >> "$config"
+                    echo "export OHOS_NDK_ROOT=\"$found_sdk\"" >> "$config"
+                    echo "export PATH=\"\$OHOS_NDK_ROOT/llvm/bin:\$PATH\"" >> "$config"
+                    print_success "已添加环境变量到 $config"
+                fi
+            done
+            
+            # 设置当前会话
+            export OHOS_NDK_ROOT="$found_sdk"
+            export PATH="$OHOS_NDK_ROOT/llvm/bin:$PATH"
+            
+            print_success "环境变量已设置，请重启终端生效"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        else
+            WARNINGS+=("HarmonyOS NDK 环境变量未设置")
+        fi
+    else
+        print_error "未找到 HarmonyOS SDK"
+        FAILED_CHECKS+=("HarmonyOS SDK")
+        
+        # 获取系统信息
+        local sdk_info
+        sdk_info=$(get_harmony_sdk_info)
+        if [[ $? -eq 0 ]]; then
+            IFS='|' read -r os_type download_url filename size <<< "$sdk_info"
+            
+            echo ""
+            print_info "HarmonyOS SDK 下载信息:"
+            print_info "系统: $os_type"
+            print_info "版本: 5.1.0.107"
+            print_info "大小: $size"
+            print_info "下载地址: $download_url"
+            echo ""
+            
+            if ask_install "HarmonyOS SDK" "install_harmony_sdk"; then
+                print_success "HarmonyOS SDK 安装完成"
+                PASSED_CHECKS=$((PASSED_CHECKS + 1))
+            fi
+        else
+            print_info "请手动下载并安装 HarmonyOS SDK:"
+            print_info "访问: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/"
+            print_info "下载适合您系统的 SDK 包"
         fi
     fi
 }
@@ -1729,7 +2119,16 @@ main() {
     echo ""
     
     # 检查 Android NDK
+    print_info "调用 Android NDK 检查..."
     check_android_ndk
+    print_info "Android NDK 检查完成"
+    
+    echo ""
+    
+    # 检查 HarmonyOS SDK
+    print_info "开始检查 HarmonyOS SDK..."
+    check_harmony_sdk
+    print_info "HarmonyOS SDK 检查完成"
     
     echo ""
     
@@ -1783,6 +2182,11 @@ main() {
             echo "  https://developer.android.com/ndk/downloads"
             echo "  解压后设置 ANDROID_NDK_ROOT 环境变量"
             echo ""
+            echo "HarmonyOS SDK 下载:"
+            echo "  Linux版本: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz"
+            echo "  解压后设置 OHOS_NDK_ROOT 环境变量"
+            echo "  或运行 './check-env.sh' 自动下载安装"
+            echo ""
             echo "ARM64 MinGW (windows-arm64):"
             echo "  当前Ubuntu版本不支持，可使用Docker或CI/CD方案"
             echo "  运行 './check-env.sh' 查看详细替代方案"
@@ -1802,6 +2206,12 @@ main() {
             echo "  https://developer.android.com/ndk/downloads"
             echo "  解压后设置 ANDROID_NDK_ROOT 环境变量"
             echo ""
+            echo "HarmonyOS SDK 下载:"
+            echo "  Intel Mac: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-PUBLIC.tar.gz"
+            echo "  Apple Silicon: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz"
+            echo "  解压后设置 OHOS_NDK_ROOT 环境变量"
+            echo "  或运行 './check-env.sh' 自动下载安装"
+            echo ""
             echo "ARM64 MinGW (windows-arm64):"
             echo "  检查最新版mingw-w64是否包含ARM64支持"
             echo ""
@@ -1814,5 +2224,7 @@ main() {
     fi
 }
 
-# 脚本入口
-main "$@"
+# 脚本入口 - 只有直接运行脚本时才执行主函数
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -67,6 +67,9 @@ elif host_machine.system() == 'darwin'
     # macOS 使用通配符符号列表
     symbol_hiding_args = ['-Wl,-exported_symbols_list,' + meson.current_source_dir() + '/exports/exports.macos.symbols']
   endif
+elif host_machine.system() == 'harmony'
+  # HarmonyOS 使用版本脚本隐藏符号
+  symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.harmony.map']
 else
   # Unix-like 系统使用版本脚本隐藏符号
   symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.linux.map']
@@ -158,6 +161,37 @@ elif host_system.contains('android') or get_option('android_build')
     install_dir = '../Plugins/lib/android/x86_64'
   elif android_abi == 'x86'
     install_dir = '../Plugins/lib/android/x86'
+  endif
+
+# HarmonyOS 配置 (通过交叉编译文件处理)
+elif host_system.contains('harmony') or get_option('harmony_build')
+  platform_c_args += [
+    '-fPIC',
+    '-D__MUSL__',
+    '-DOHOS_PLATFORM'
+  ]
+  platform_link_args += [
+    '-shared', 
+    '-lm'
+  ]
+  # 保持默认名称，Meson 会自动添加 'lib' 前缀
+  library_suffix = '.so'
+  
+  harmony_abi = get_option('harmony_abi')
+  harmony_stl = get_option('harmony_stl')
+  
+  if harmony_abi == 'arm64-v8a'
+    install_dir = '../Plugins/lib/OpenHarmony/arm64'
+    # 确保使用正确的目标架构
+    platform_c_args += ['--target=aarch64-linux-ohos']
+    platform_link_args += ['--target=aarch64-linux-ohos']
+  endif
+  
+  # 根据 STL 选择添加相应的链接参数
+  if harmony_stl == 'c++_shared'
+    platform_link_args += ['-lc++_shared']
+  elif harmony_stl == 'c++_static'
+    platform_link_args += ['-static-libstdc++']
   endif
 endif
 
