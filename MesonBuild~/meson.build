@@ -54,15 +54,19 @@ symbol_export_files = []
 
 if host_machine.system() == 'windows'
   # Windows 使用 .def 文件控制符号导出
-  # .def 文件在 Meson 中需要直接作为源文件包含，不能作为链接参数
-  # 不需要额外的链接参数，Meson 会自动处理 .def 文件
   symbol_hiding_args = []
 elif host_machine.system() == 'darwin'
-  # macOS 使用 -exported_symbols_list 来限制导出符号
-  symbol_hiding_args = ['-Wl,-exported_symbols_list,' + meson.current_source_dir() + '/exports.symbols']
+  # macOS/iOS 使用 -exported_symbols_list 来限制导出符号
+  if ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator'
+    # iOS 使用详细的符号列表
+    symbol_hiding_args = ['-Wl,-exported_symbols_list,' + meson.current_source_dir() + '/exports/exports.ios.symbols']
+  else
+    # macOS 使用通配符符号列表
+    symbol_hiding_args = ['-Wl,-exported_symbols_list,' + meson.current_source_dir() + '/exports/exports.macos.symbols']
+  endif
 else
   # Unix-like 系统使用版本脚本隐藏符号
-  symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports.map']
+  symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.linux.map']
 endif
 
 # 基础编译参数
@@ -162,19 +166,20 @@ endif
 # 构建库 (根据平台选择静态或动态)
 library_sources = [sqlite_src]
 
+# Windows 平台添加 .def 文件通过链接参数 (MinGW 需要这样处理)
+windows_def_args = []
+if host_machine.system() == 'windows'
+  windows_def_args = [meson.current_source_dir() + '/exports/exports.windows.def']
+endif
+
 # 准备库构建的额外参数
 extra_args = {
   'c_args' : platform_c_args,
-  'link_args' : platform_link_args,
+  'link_args' : platform_link_args + windows_def_args,
   'dependencies' : [openssl_dep],  # 添加 OpenSSL 依赖
   'install' : false,  # 不使用默认安装，手动复制到指定位置
   'name_suffix' : library_suffix.substring(1),  # 去掉前面的点
 }
-
-# Windows 平台添加 .def 文件支持
-if host_machine.system() == 'windows'
-  extra_args += {'vs_module_defs' : meson.current_source_dir() + '/exports.def'}
-endif
 
 # iOS平台构建静态库，其他平台构建动态库
 if host_system == 'darwin' and (ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator')

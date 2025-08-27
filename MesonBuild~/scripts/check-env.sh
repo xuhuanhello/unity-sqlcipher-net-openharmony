@@ -205,6 +205,37 @@ detect_os() {
     fi
 }
 
+# 检测macOS架构，避免Rosetta影响
+detect_mac_arch() {
+    local mac_arch=""
+    
+    # 方法1: 检查系统profiler (最可靠)
+    if command -v system_profiler &> /dev/null; then
+        local hw_info=$(system_profiler SPHardwareDataType 2>/dev/null)
+        if echo "$hw_info" | grep -q "Apple M[0-9]"; then
+            mac_arch="arm64"
+        elif echo "$hw_info" | grep -q "Intel"; then
+            mac_arch="x86_64"
+        fi
+    fi
+    
+    # 方法2: 如果方法1失败，使用uname -m
+    if [[ -z "$mac_arch" ]]; then
+        mac_arch=$(uname -m)
+    fi
+    
+    # 方法3: 最后的保险，强制使用原生架构检测
+    if [[ -z "$mac_arch" || "$mac_arch" == "x86_64" ]]; then
+        # 尝试强制使用ARM64架构运行uname
+        local native_arch=$(arch -arm64 uname -m 2>/dev/null || uname -m)
+        if [[ "$native_arch" == "arm64" ]]; then
+            mac_arch="arm64"
+        fi
+    fi
+    
+    echo "$mac_arch"
+}
+
 # 检测Ubuntu版本
 get_ubuntu_version() {
     if [[ -f /etc/lsb-release ]]; then
@@ -275,6 +306,1113 @@ suggest_arm64_mingw_alternatives() {
         echo ""
         return 0
     fi
+    return 1
+}
+
+# 检查和修复 Homebrew 架构匹配
+check_and_fix_homebrew_arch() {
+    local mac_arch=$(detect_mac_arch)
+    local expected_brew_path=""
+    local current_brew_path=""
+    local brew_arch_match=true
+    
+    if [[ "$mac_arch" == "arm64" ]]; then
+        expected_brew_path="/opt/homebrew/bin/brew"
+        print_info "Apple Silicon Mac 应使用: $expected_brew_path"
+    elif [[ "$mac_arch" == "x86_64" ]]; then
+        expected_brew_path="/usr/local/bin/brew"
+        print_info "Intel Mac 应使用: $expected_brew_path"
+    fi
+    
+    if command -v brew &> /dev/null; then
+        current_brew_path=$(which brew)
+        print_info "当前 Homebrew 路径: $current_brew_path"
+        
+        if [[ "$current_brew_path" != "$expected_brew_path" ]]; then
+            brew_arch_match=false
+            if [[ "$mac_arch" == "arm64" && "$current_brew_path" == "/usr/local/bin/brew" ]]; then
+                print_warning "检测到架构不匹配："
+                print_warning "您在 Apple Silicon Mac 上使用 Intel 版本的 Homebrew"
+                print_info "这会导致安装 Intel 版本的软件，影响性能"
+            elif [[ "$mac_arch" == "x86_64" && "$current_brew_path" == "/opt/homebrew/bin/brew" ]]; then
+                print_warning "检测到架构不匹配："
+                print_warning "您在 Intel Mac 上使用 Apple Silicon 版本的 Homebrew"
+                print_info "这可能导致兼容性问题"
+            fi
+            
+            echo ""
+            print_info "解决方案："
+            echo "  1) 安装正确架构的 Homebrew 并设置共存 (推荐)"
+            echo "  2) 继续使用当前 Homebrew (可能有性能问题)"
+            echo "  3) 跳过 Homebrew，使用其他安装方式"
+            echo ""
+            read -p "请选择 [1-3]: " -n 1 -r HOMEBREW_CHOICE
+            echo
+            echo
+            
+            case $HOMEBREW_CHOICE in
+                1)
+                    print_info "将安装正确架构的 Homebrew 并设置别名共存..."
+                    install_correct_homebrew_simplified "$mac_arch" "$current_brew_path" "$expected_brew_path"
+                    return $?
+                    ;;
+                2)
+                    print_warning "继续使用当前 Homebrew，可能安装错误架构的软件"
+                    return 0
+                    ;;
+                3)
+                    print_info "将跳过 Homebrew，使用直接下载方式"
+                    return 2  # 特殊返回码，表示跳过 Homebrew
+                    ;;
+                *)
+                    print_info "无效选择，继续使用当前 Homebrew"
+                    return 0
+                    ;;
+            esac
+        else
+            print_success "Homebrew 架构匹配正确"
+            return 0
+        fi
+    else
+        print_info "未安装 Homebrew"
+        echo ""
+        read -p "是否安装适合您系统架构的 Homebrew? [y/N]: " -n 1 -r INSTALL_BREW
+        echo
+        if [[ $INSTALL_BREW =~ ^[Yy]$ ]]; then
+            install_correct_homebrew_simplified "$mac_arch" "" "$expected_brew_path"
+            return $?
+        else
+            print_info "跳过 Homebrew 安装"
+            return 2  # 跳过 Homebrew
+        fi
+    fi
+}
+
+# 简化版本的 Homebrew 安装函数 (直接安装并设置共存)
+install_correct_homebrew_simplified() {
+    local mac_arch="$1"
+    local current_brew_path="$2"
+    local expected_brew_path="$3"
+    
+    print_info "安装适合 $mac_arch 架构的 Homebrew..."
+    
+    # 直接安装并设置共存，不再询问
+    if [[ -n "$current_brew_path" ]]; then
+        print_info "检测到现有的 Homebrew: $current_brew_path"
+        print_info "将安装新版本并设置别名共存"
+    fi
+    
+    print_info "下载并安装 Homebrew..."
+    print_info "这可能需要几分钟时间，请耐心等待..."
+    
+    # 检查用户权限
+    if ! groups "$USER" | grep -q admin; then
+        print_error "当前用户不是管理员，无法安装 Homebrew"
+        print_info "请联系系统管理员或使用管理员账户运行此脚本"
+        return 1
+    fi
+    
+    # 检查是否已经有正确架构的Homebrew
+    if [[ -f "$expected_brew_path" ]]; then
+        print_info "检测到已安装正确架构的 Homebrew: $expected_brew_path"
+        print_success "无需重新安装，将配置别名"
+        # 直接跳到配置别名部分
+        local shell_config=""
+        if [[ "$SHELL" == *"zsh"* ]]; then
+            shell_config="$HOME/.zshrc"
+        elif [[ "$SHELL" == *"bash"* ]]; then
+            shell_config="$HOME/.bashrc"
+        fi
+        
+        if [[ -n "$shell_config" ]]; then
+            setup_homebrew_aliases "$shell_config" "$current_brew_path" "$expected_brew_path"
+        fi
+        return 0
+    fi
+    
+    # 安装 Homebrew (交互模式，允许输入sudo密码)
+    print_info "正在安装Apple Silicon版本的Homebrew..."
+    print_info "安装过程中需要sudo权限，请按提示输入密码"
+    
+    # 预先获取sudo权限，避免安装过程中中断
+    print_info "请输入sudo密码以获取管理员权限:"
+    if ! sudo -v; then
+        print_error "无法获取sudo权限，安装失败"
+        return 1
+    fi
+    
+    # 根据架构选择合适的安装命令
+    local install_cmd=""
+    if [[ "$mac_arch" == "arm64" ]]; then
+        # Apple Silicon Mac - 安装到 /opt/homebrew
+        install_cmd='/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'
+        print_info "使用 Apple Silicon 版本安装到 /opt/homebrew"
+    else
+        # Intel Mac - 强制使用 x86_64 架构安装到 /usr/local
+        install_cmd='arch -x86_64 /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'
+        print_info "使用 Intel 版本安装到 /usr/local"
+    fi
+    
+    print_info "安装命令: $install_cmd"
+    echo ""
+    print_info "将安装Apple Silicon版本的Homebrew并与现有Intel版本共存"
+    echo ""
+    print_info "共存方案："
+    echo "- Intel版本: /usr/local/bin/brew (别名: ibrew)"
+    echo "- Apple Silicon版本: /opt/homebrew/bin/brew (别名: abrew)"
+    echo ""
+    print_info "安装命令: $install_cmd"
+    echo ""
+    
+    read -p "是否现在安装Apple Silicon版本的Homebrew? [y/N]: " -n 1 -r AUTO_INSTALL
+    echo
+    echo
+    
+    if [[ $AUTO_INSTALL =~ ^[Yy]$ ]]; then
+        print_info "开始安装Apple Silicon版本的Homebrew..."
+        print_info "安装过程可能需要几分钟，请耐心等待..."
+        
+        # 确保不设置NONINTERACTIVE，允许交互
+        unset NONINTERACTIVE
+        
+        # 执行安装命令
+        eval "$install_cmd"
+        local install_result=$?
+        
+        # 检查安装是否成功 - 不仅看退出码，还要检查文件是否存在
+        if [[ $install_result -eq 0 ]] || [[ -f "$expected_brew_path" ]]; then
+            print_success "Homebrew 安装完成"
+            
+            # 检查安装路径是否正确
+            if [[ -f "$expected_brew_path" ]]; then
+                print_success "Homebrew 安装在正确位置: $expected_brew_path"
+                
+                # 自动配置环境变量
+                print_info "自动配置环境变量..."
+                if [[ "$mac_arch" == "arm64" ]]; then
+                    # 执行Apple Silicon版本的环境配置
+                    eval "$(/opt/homebrew/bin/brew shellenv)"
+                    
+                    # 添加到shell配置文件以便持久化
+                    local profile_file=""
+                    if [[ "$SHELL" == *"zsh"* ]]; then
+                        profile_file="$HOME/.zprofile"
+                    elif [[ "$SHELL" == *"bash"* ]]; then
+                        profile_file="$HOME/.bash_profile"
+                    fi
+                    
+                    if [[ -n "$profile_file" ]] && ! grep -q 'eval.*brew shellenv' "$profile_file" 2>/dev/null; then
+                        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$profile_file"
+                        print_success "已添加环境配置到 $profile_file"
+                    fi
+                    
+                    print_success "Apple Silicon Homebrew环境变量已配置"
+                fi
+            
+            # 配置环境变量和别名
+            print_info "配置环境变量和别名..."
+            local shell_config=""
+            if [[ "$SHELL" == *"zsh"* ]]; then
+                shell_config="$HOME/.zshrc"
+            elif [[ "$SHELL" == *"bash"* ]]; then
+                shell_config="$HOME/.bashrc"
+            fi
+            
+            if [[ -n "$shell_config" ]]; then
+                # 设置别名
+                setup_homebrew_aliases "$shell_config" "$current_brew_path" "$expected_brew_path"
+                
+                # 立即在当前会话中设置共存别名
+                alias abrew='arch -arm64 /opt/homebrew/bin/brew'
+                alias ibrew='arch -x86_64 /usr/local/bin/brew'
+                alias brew='abrew'  # 默认使用Apple Silicon版本
+                export PATH="/opt/homebrew/bin:$PATH"
+                
+                print_success "共存别名已设置到当前会话"
+                print_info "当前会话可用命令: abrew, ibrew, brew"
+            fi
+            
+            # 验证双版本安装
+            echo ""
+            print_info "验证Homebrew双版本安装..."
+            
+            # 验证Apple Silicon版本
+            if [[ -f "/opt/homebrew/bin/brew" ]]; then
+                local arm_version=$(arch -arm64 /opt/homebrew/bin/brew --version 2>/dev/null | head -1 || echo "获取版本失败")
+                print_success "Apple Silicon版本: $arm_version"
+            else
+                print_error "Apple Silicon版本安装失败"
+            fi
+            
+            # 验证Intel版本
+            if [[ -f "/usr/local/bin/brew" ]]; then
+                local intel_version=$(arch -x86_64 /usr/local/bin/brew --version 2>/dev/null | head -1 || echo "获取版本失败")
+                print_success "Intel版本: $intel_version"
+            else
+                print_warning "Intel版本未找到"
+            fi
+            
+            # 验证别名
+            echo ""
+            print_info "验证别名配置..."
+            if command -v abrew &> /dev/null; then
+                print_success "abrew 别名可用"
+            fi
+            if command -v ibrew &> /dev/null; then
+                print_success "ibrew 别名可用"  
+            fi
+            
+            print_success "🎉 Homebrew双版本共存配置完成！"
+            return 0
+            else
+                print_error "Homebrew 安装位置不符合预期"
+                return 1
+            fi
+        else
+            # 安装失败，但先检查是否实际上已经安装了
+            if [[ -f "$expected_brew_path" ]]; then
+                print_warning "安装过程有警告，但Homebrew已成功安装"
+                print_info "自动配置环境变量..."
+                if [[ "$mac_arch" == "arm64" ]]; then
+                    eval "$(/opt/homebrew/bin/brew shellenv)"
+                    
+                    # 添加到shell配置文件以便持久化
+                    local profile_file=""
+                    if [[ "$SHELL" == *"zsh"* ]]; then
+                        profile_file="$HOME/.zprofile"
+                    elif [[ "$SHELL" == *"bash"* ]]; then
+                        profile_file="$HOME/.bash_profile"
+                    fi
+                    
+                    if [[ -n "$profile_file" ]] && ! grep -q 'eval.*brew shellenv' "$profile_file" 2>/dev/null; then
+                        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$profile_file"
+                        print_success "已添加环境配置到 $profile_file"
+                    fi
+                    
+                    print_success "Apple Silicon Homebrew环境变量已配置"
+                fi
+                # 继续配置别名
+                local shell_config=""
+                if [[ "$SHELL" == *"zsh"* ]]; then
+                    shell_config="$HOME/.zshrc"
+                elif [[ "$SHELL" == *"bash"* ]]; then
+                    shell_config="$HOME/.bashrc"
+                fi
+                
+                if [[ -n "$shell_config" ]]; then
+                    setup_homebrew_aliases "$shell_config" "$current_brew_path" "$expected_brew_path"
+                    
+                    # 立即在当前会话中设置共存别名
+                    alias abrew='arch -arm64 /opt/homebrew/bin/brew'
+                    alias ibrew='arch -x86_64 /usr/local/bin/brew'
+                    alias brew='abrew'
+                    export PATH="/opt/homebrew/bin:$PATH"
+                    
+                    print_success "共存别名已设置到当前会话"
+                fi
+                
+                print_success "🎉 Homebrew双版本共存配置完成！"
+                return 0
+            else
+                print_error "Homebrew 安装失败"
+                echo ""
+                print_info "可能的原因："
+                echo "  1) 网络连接问题"
+                echo "  2) 权限不足"
+                echo "  3) 系统配置问题"
+                echo ""
+                print_info "替代方案："
+                echo "  1) 手动安装 Homebrew:"
+                if [[ "$mac_arch" == "arm64" ]]; then
+                    echo "     /bin/bash -c \"\$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)\""
+                else
+                    echo "     arch -x86_64 /bin/bash -c \"\$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)\""
+                fi
+                echo "  2) 或使用官方源 (可能较慢):"
+                echo "     /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+                echo "  3) 使用现有的 Intel 版本 Homebrew (性能较差)"
+                echo "  4) 跳过 Homebrew，使用直接下载方式安装软件"
+                return 1
+            fi
+        fi
+    else
+        print_info "跳过自动安装"
+        print_info "请手动安装后重新运行此脚本"
+        return 1
+    fi
+}
+
+# 安装正确架构的 Homebrew (支持共存) - 保留原函数用于其他地方
+install_correct_homebrew() {
+    local mac_arch="$1"
+    local current_brew_path="$2"
+    local expected_brew_path="$3"
+    
+    print_info "安装适合 $mac_arch 架构的 Homebrew..."
+    
+    # 如果已有不匹配的 Homebrew，建议共存
+    if [[ -n "$current_brew_path" ]]; then
+        print_info "检测到现有的 Homebrew: $current_brew_path"
+        echo ""
+        print_info "推荐方案: 让两个版本共存，使用别名区分"
+        echo "  - abrew: Apple Silicon 版本 (ARM64)"
+        echo "  - ibrew: Intel 版本 (x86_64)"
+        echo ""
+        echo "选择方案:"
+        echo "  1) 安装并设置别名共存 (推荐)"
+        echo "  2) 替换现有版本"
+        echo "  3) 取消安装"
+        echo ""
+        read -p "请选择 [1-3]: " -n 1 -r INSTALL_CHOICE
+        echo
+        echo
+        
+        case $INSTALL_CHOICE in
+            1)
+                print_info "将安装新版本并设置别名共存"
+                ;;
+            2)
+                print_warning "将替换现有版本"
+                read -p "确认要卸载现有的 Homebrew? [y/N]: " -n 1 -r UNINSTALL_OLD
+                echo
+                if [[ $UNINSTALL_OLD =~ ^[Yy]$ ]]; then
+                    print_info "卸载现有 Homebrew..."
+                    if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"; then
+                        print_success "旧版本 Homebrew 卸载完成"
+                    else
+                        print_warning "卸载可能不完整，但继续安装新版本"
+                    fi
+                else
+                    print_info "取消替换，改为共存方案"
+                fi
+                ;;
+            3)
+                print_info "取消安装"
+                return 1
+                ;;
+            *)
+                print_info "无效选择，使用共存方案"
+                ;;
+        esac
+    fi
+    
+    print_info "下载并安装 Homebrew..."
+    print_info "这可能需要几分钟时间，请耐心等待..."
+    
+    # 安装 Homebrew
+    # 根据架构选择合适的安装命令
+    local install_cmd=""
+    if [[ "$mac_arch" == "arm64" ]]; then
+        install_cmd='/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'
+    else
+        install_cmd='arch -x86_64 /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'
+    fi
+    
+    if eval "$install_cmd"; then
+        print_success "Homebrew 安装完成"
+        
+        # 检查安装路径是否正确
+        if [[ -f "$expected_brew_path" ]]; then
+            print_success "Homebrew 安装在正确位置: $expected_brew_path"
+            
+            # 配置环境变量和别名
+            print_info "配置环境变量和别名..."
+            local shell_config=""
+            if [[ "$SHELL" == *"zsh"* ]]; then
+                shell_config="$HOME/.zshrc"
+            elif [[ "$SHELL" == *"bash"* ]]; then
+                shell_config="$HOME/.bashrc"
+            fi
+            
+            if [[ -n "$shell_config" ]]; then
+                # 设置别名而不是直接修改PATH
+                setup_homebrew_aliases "$shell_config" "$current_brew_path" "$expected_brew_path"
+                
+                # 立即在当前会话中设置别名
+                if [[ "$mac_arch" == "arm64" ]]; then
+                    alias abrew='arch -arm64 /opt/homebrew/bin/brew'
+                    alias ibrew='arch -x86_64 /usr/local/bin/brew'
+                    # 设置默认使用Apple Silicon版本
+                    export PATH="/opt/homebrew/bin:$PATH"
+                else
+                    alias ibrew='arch -x86_64 /usr/local/bin/brew'
+                    alias abrew='arch -arm64 /opt/homebrew/bin/brew'
+                    # 设置默认使用Intel版本
+                    export PATH="/usr/local/bin:$PATH"
+                fi
+                print_success "别名已设置到当前会话"
+            fi
+            
+            # 验证安装
+            if command -v brew &> /dev/null; then
+                local new_brew_path=$(which brew)
+                if [[ "$new_brew_path" == "$expected_brew_path" ]]; then
+                    print_success "Homebrew 架构配置正确"
+                    return 0
+                else
+                    print_warning "Homebrew 安装成功，但路径可能需要手动配置"
+                    print_info "请重启终端或执行: source $shell_config"
+                    return 0
+                fi
+            else
+                print_warning "Homebrew 安装完成，但需要重启终端生效"
+                return 0
+            fi
+        else
+            print_error "Homebrew 安装位置不符合预期"
+            return 1
+        fi
+    else
+        print_error "Homebrew 安装失败"
+        return 1
+    fi
+}
+
+# 设置 Homebrew 共存别名
+setup_homebrew_aliases() {
+    local shell_config="$1"
+    local current_brew_path="$2"
+    local expected_brew_path="$3"
+    
+    print_info "设置 Homebrew 共存别名到 $shell_config"
+    
+    # 检查是否已经有别名配置
+    if grep -q "alias.*brew.*arch" "$shell_config" 2>/dev/null; then
+        print_warning "检测到已有 Homebrew 别名配置"
+        echo ""
+        read -p "是否覆盖现有配置? [y/N]: " -n 1 -r OVERWRITE
+        echo
+        if [[ ! $OVERWRITE =~ ^[Yy]$ ]]; then
+            print_info "保留现有配置"
+            return 0
+        fi
+        # 备份现有配置
+        cp "$shell_config" "$shell_config.backup.$(date +%Y%m%d_%H%M%S)"
+        print_info "已备份现有配置"
+    fi
+    
+    # 添加别名配置
+    echo "" >> "$shell_config"
+    echo "# Homebrew 双版本共存配置 - $(date)" >> "$shell_config"
+    echo "alias abrew='arch -arm64 /opt/homebrew/bin/brew'  # Apple Silicon Homebrew" >> "$shell_config"
+    echo "alias ibrew='arch -x86_64 /usr/local/bin/brew'   # Intel Homebrew" >> "$shell_config"
+    echo "" >> "$shell_config"
+    
+    # 根据M1 Mac的特性，默认优先使用Apple Silicon版本
+    echo "# 优先使用 Apple Silicon 版本 (推荐用于M1 Mac)" >> "$shell_config"
+    echo "export PATH=\"/opt/homebrew/bin:\$PATH\"" >> "$shell_config"
+    echo "alias brew='abrew'  # 默认使用 Apple Silicon 版本" >> "$shell_config"
+    echo "" >> "$shell_config"
+    
+    print_success "别名配置已添加到 $shell_config"
+    
+    # 显示使用说明
+    echo ""
+    print_info "🎉 Homebrew 共存配置完成！"
+    echo ""
+    print_info "📋 使用说明:"
+    echo "  abrew - Apple Silicon 版本 (推荐，性能更好)"
+    echo "  ibrew - Intel 版本 (兼容性更好)"
+    echo "  brew  - 默认指向 abrew (Apple Silicon 版本)"
+    echo ""
+    print_info "💡 使用示例:"
+    echo "  abrew install docker     # 安装 ARM64 原生版本"
+    echo "  ibrew install some-tool  # 安装 Intel 兼容版本"
+    echo "  brew install node        # 默认安装 ARM64 版本"
+    echo ""
+    print_info "⚡ 重新加载配置:"
+    echo "  source $shell_config"
+    echo ""
+}
+
+# 检查 Docker 环境
+check_docker() {
+    print_info "检查 Docker 环境..."
+    
+    # 显示系统架构信息
+    if [[ "$OS" == "macos" ]]; then
+        local mac_arch=$(detect_mac_arch)
+        if [[ "$mac_arch" == "arm64" ]]; then
+            print_info "系统架构: Apple Silicon Mac (ARM64)"
+        elif [[ "$mac_arch" == "x86_64" ]]; then
+            print_info "系统架构: Intel Mac (x86_64)"
+        fi
+    fi
+    
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 2))  # Docker命令 + Docker服务
+    
+    if command -v docker &> /dev/null; then
+        local docker_version=$(docker --version 2>/dev/null || echo "未知版本")
+        print_success "Docker 已安装: $docker_version"
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        
+        # 检查 Docker 服务是否运行
+        if docker info &> /dev/null 2>&1; then
+            print_success "Docker 服务正在运行"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+            
+            # 显示 Docker 详细信息
+            local docker_server_version=$(docker info --format "{{.ServerVersion}}" 2>/dev/null || echo "未知")
+            local docker_arch=$(docker info --format "{{.Architecture}}" 2>/dev/null || echo "未知")
+            local docker_os=$(docker info --format "{{.OSType}}" 2>/dev/null || echo "未知")
+            
+            if [[ "$docker_server_version" != "未知" ]]; then
+                print_info "Docker 服务器版本: $docker_server_version"
+            fi
+            if [[ "$docker_arch" != "未知" ]]; then
+                print_info "Docker 架构: $docker_arch"
+            fi
+            if [[ "$docker_os" != "未知" ]]; then
+                print_info "Docker 操作系统: $docker_os"
+            fi
+            
+            # 检查是否是正确的架构版本
+            if [[ "$OS" == "macos" ]]; then
+                local mac_arch=$(detect_mac_arch)
+                if [[ "$mac_arch" == "arm64" && "$docker_arch" == "x86_64" ]]; then
+                    print_warning "检测到您在 Apple Silicon Mac 上运行 Intel 版本的 Docker"
+                    print_info "建议安装 Apple Silicon 版本以获得更好的性能"
+                elif [[ "$mac_arch" == "x86_64" && "$docker_arch" == "aarch64" ]]; then
+                    print_warning "检测到您在 Intel Mac 上运行 ARM64 版本的 Docker"
+                    print_info "建议安装 Intel 版本以获得更好的兼容性"
+                fi
+            fi
+        else
+            print_warning "Docker 已安装但服务未运行"
+            print_info "请启动 Docker 服务："
+            if [[ "$OS" == "macos" ]]; then
+                echo "  - 启动 Docker Desktop 应用"
+                echo "  - 或使用命令: open -a Docker"
+            else
+                echo "  - sudo systemctl start docker"
+                echo "  - sudo service docker start"
+            fi
+            WARNINGS+=("Docker 服务未运行")
+        fi
+    else
+        print_error "Docker 未安装"
+        FAILED_CHECKS+=("Docker")
+        
+        # 根据操作系统提供安装建议
+        local install_cmd=""
+        if [[ "$OS" == "macos" ]]; then
+            install_cmd="install_docker_macos"
+        elif [[ "$OS" == "linux" ]]; then
+            install_cmd="install_docker_linux"
+        fi
+        
+        if [[ -n "$install_cmd" ]]; then
+            if ask_install "Docker" "$install_cmd"; then
+                print_success "Docker 安装完成"
+                print_info "请重启终端或重新加载环境"
+                if [[ "$OS" == "macos" ]]; then
+                    print_info "如果是 Docker Desktop，请启动应用"
+                else
+                    print_info "请启动 Docker 服务: sudo systemctl start docker"
+                fi
+                PASSED_CHECKS=$((PASSED_CHECKS + 1))
+            fi
+        else
+            print_info "请手动安装 Docker: https://docs.docker.com/get-docker/"
+        fi
+    fi
+}
+
+# macOS Docker 安装函数
+install_docker_macos() {
+    print_info "在 macOS 上安装 Docker..."
+    
+    # 检测 macOS 芯片架构
+    local mac_arch=$(detect_mac_arch)
+    local docker_arch=""
+    local docker_url=""
+    
+    if [[ "$mac_arch" == "arm64" ]]; then
+        docker_arch="Apple Silicon"
+        docker_url="https://desktop.docker.com/mac/main/arm64/Docker.dmg"
+        print_info "检测到 Apple Silicon Mac (ARM64)"
+    elif [[ "$mac_arch" == "x86_64" ]]; then
+        docker_arch="Intel"
+        docker_url="https://desktop.docker.com/mac/main/amd64/Docker.dmg"
+        print_info "检测到 Intel Mac (x86_64)"
+    else
+        print_error "未知的 Mac 架构: $mac_arch"
+        return 1
+    fi
+    
+    # 首先检查和修复 Homebrew 架构
+    print_info "检查 Homebrew 架构匹配..."
+    check_and_fix_homebrew_arch
+    local homebrew_status=$?
+    
+    # homebrew_status: 0=正常, 1=失败, 2=跳过Homebrew
+    if [[ $homebrew_status -eq 1 ]]; then
+        print_error "Homebrew 配置失败"
+        print_info "将使用直接下载方式安装 Docker"
+        install_docker_directly_macos "$docker_url" "$docker_arch"
+        return $?
+    elif [[ $homebrew_status -eq 2 ]]; then
+        print_info "跳过 Homebrew，使用直接下载方式"
+        install_docker_directly_macos "$docker_url" "$docker_arch"
+        return $?
+    fi
+    
+    # 重新检测 Homebrew 状态
+    local brew_path=""
+    local brew_arch="未知"
+    local use_homebrew=true
+    
+    if command -v brew &> /dev/null; then
+        brew_path=$(which brew)
+        if [[ "$brew_path" == "/opt/homebrew/bin/brew" ]]; then
+            brew_arch="Apple Silicon"
+        elif [[ "$brew_path" == "/usr/local/bin/brew" ]]; then
+            brew_arch="Intel"
+        fi
+        print_success "当前 Homebrew: $brew_path ($brew_arch 版本)"
+        
+        # 最终检查架构匹配
+        if [[ "$mac_arch" == "arm64" && "$brew_arch" == "Intel" ]]; then
+            print_warning "Homebrew 架构仍然不匹配，建议使用直接下载"
+            use_homebrew=false
+        elif [[ "$mac_arch" == "x86_64" && "$brew_arch" == "Apple Silicon" ]]; then
+            print_warning "Homebrew 架构仍然不匹配，建议使用直接下载"
+            use_homebrew=false
+        fi
+    else
+        print_warning "Homebrew 不可用，使用直接下载方式"
+        use_homebrew=false
+    fi
+    
+    print_info "将安装适合 $docker_arch Mac 的 Docker Desktop"
+    echo ""
+    
+    # 根据 Homebrew 状态提供安装选项
+    echo "请选择安装方式："
+    
+    if [[ "$use_homebrew" == "true" ]]; then
+        echo "  1) 使用 Homebrew 安装 (推荐 - 架构匹配)"
+        echo "  2) 直接下载安装"
+        echo "  3) 安装轻量级 Colima (开源替代方案)"
+        echo "  4) 手动下载安装"
+        echo "  5) 取消安装"
+        echo ""
+        read -p "请选择 [1-5]: " -n 1 -r INSTALL_CHOICE
+    else
+        echo "  1) 直接下载安装 (推荐 - 正确架构)"
+        echo "  2) 安装轻量级 Colima (开源替代方案)"
+        echo "  3) 手动下载安装"
+        echo "  4) 取消安装"
+        echo ""
+        read -p "请选择 [1-4]: " -n 1 -r INSTALL_CHOICE
+    fi
+    echo
+    echo
+    
+    case $INSTALL_CHOICE in
+        1)
+            if [[ "$use_homebrew" == "true" ]]; then
+                # 使用 Homebrew 安装 (架构已匹配)
+                print_info "使用 Homebrew 安装 Docker Desktop..."
+                
+                # 可选更新 Homebrew
+                echo ""
+                read -p "是否更新 Homebrew? (可能需要几分钟) [y/N]: " -n 1 -r UPDATE_BREW
+                echo
+                if [[ $UPDATE_BREW =~ ^[Yy]$ ]]; then
+                    print_info "更新 Homebrew..."
+                    brew update
+                else
+                    print_info "跳过 Homebrew 更新"
+                fi
+                
+                # 安装 Docker Desktop (使用正确架构的brew)
+                print_info "安装 Docker Desktop..."
+                local brew_cmd="brew"
+                if [[ "$mac_arch" == "arm64" ]]; then
+                    # 如果有Apple Silicon版本的Homebrew，优先使用
+                    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+                        brew_cmd="arch -arm64 /opt/homebrew/bin/brew"
+                        print_info "使用 Apple Silicon 版本的 Homebrew"
+                    fi
+                elif [[ "$mac_arch" == "x86_64" ]]; then
+                    # 如果有Intel版本的Homebrew，优先使用
+                    if [[ -f "/usr/local/bin/brew" ]]; then
+                        brew_cmd="arch -x86_64 /usr/local/bin/brew"
+                        print_info "使用 Intel 版本的 Homebrew"
+                    fi
+                fi
+                
+                if $brew_cmd install --cask docker-desktop 2>/dev/null || $brew_cmd install --cask docker; then
+                    print_success "Docker Desktop 安装完成"
+                    
+                    # 提示用户启动 Docker
+                    echo ""
+                    read -p "是否现在启动 Docker Desktop? [y/N]: " -n 1 -r START_DOCKER
+                    echo
+                    if [[ $START_DOCKER =~ ^[Yy]$ ]]; then
+                        print_info "启动 Docker Desktop..."
+                        open -a Docker
+                        print_info "Docker Desktop 正在启动，请等待几分钟完成初始化"
+                    fi
+                    return 0
+                else
+                    print_error "Homebrew 安装 Docker 失败"
+                    print_info "尝试自动下载安装..."
+                    install_docker_directly_macos "$docker_url" "$docker_arch"
+        return $?
+                fi
+            else
+                # 直接下载安装 (推荐)
+                print_info "直接下载并安装 Docker Desktop..."
+                install_docker_directly_macos "$docker_url" "$docker_arch"
+        return $?
+            fi
+            ;;
+        2)
+            if [[ "$use_homebrew" == "true" ]]; then
+                # 直接下载安装
+                print_info "直接下载并安装 Docker Desktop..."
+                install_docker_directly_macos "$docker_url" "$docker_arch"
+        return $?
+            else
+                # 安装 Colima
+                print_info "安装 Colima (轻量级 Docker 替代方案)..."
+                install_colima_macos
+                return $?
+            fi
+            ;;
+        3)
+            if [[ "$use_homebrew" == "true" ]]; then
+                # 安装 Colima
+                print_info "安装 Colima (轻量级 Docker 替代方案)..."
+                install_colima_macos
+                return $?
+            else
+                # 手动安装指导
+                print_info "手动安装 Docker Desktop for $docker_arch Mac:"
+                echo ""
+                echo "📥 下载链接: $docker_url"
+                echo ""
+                echo "📋 安装步骤:"
+                echo "1. 点击上面的链接下载 Docker.dmg 文件"
+                echo "2. 双击下载的 Docker.dmg 文件"
+                echo "3. 将 Docker 拖拽到 Applications 文件夹"
+                echo "4. 从 Applications 文件夹启动 Docker"
+                echo "5. 按照屏幕提示完成设置"
+                echo ""
+                
+                # 询问是否自动打开下载页面
+                read -p "是否在浏览器中打开下载页面? [y/N]: " -n 1 -r OPEN_BROWSER
+                echo
+                if [[ $OPEN_BROWSER =~ ^[Yy]$ ]]; then
+                    open "$docker_url"
+                    print_info "已在浏览器中打开下载页面"
+                fi
+                return 0
+            fi
+            ;;
+        4)
+            if [[ "$use_homebrew" == "true" ]]; then
+                # 手动安装指导
+                print_info "手动安装 Docker Desktop for $docker_arch Mac:"
+                echo ""
+                echo "📥 下载链接: $docker_url"
+                echo ""
+                echo "📋 安装步骤:"
+                echo "1. 点击上面的链接下载 Docker.dmg 文件"
+                echo "2. 双击下载的 Docker.dmg 文件"
+                echo "3. 将 Docker 拖拽到 Applications 文件夹"
+                echo "4. 从 Applications 文件夹启动 Docker"
+                echo "5. 按照屏幕提示完成设置"
+                echo ""
+                
+                # 询问是否自动打开下载页面
+                read -p "是否在浏览器中打开下载页面? [y/N]: " -n 1 -r OPEN_BROWSER
+                echo
+                if [[ $OPEN_BROWSER =~ ^[Yy]$ ]]; then
+                    open "$docker_url"
+                    print_info "已在浏览器中打开下载页面"
+                fi
+                return 0
+            else
+                # 取消安装
+                print_info "取消 Docker 安装"
+                return 1
+            fi
+            ;;
+        5)
+            if [[ "$use_homebrew" == "true" ]]; then
+                print_info "取消 Docker 安装"
+                return 1
+            else
+                print_error "无效选择，取消安装"
+                return 1
+            fi
+            ;;
+        *)
+            print_error "无效选择，取消安装"
+            return 1
+            ;;
+    esac
+    
+    # 如果 Homebrew 安装失败，提供手动安装指导
+    print_info "自动安装失败，请手动安装 Docker Desktop:"
+    echo ""
+    echo "📥 下载地址: $docker_url"
+    echo "📋 或访问: https://docs.docker.com/desktop/mac/install/"
+    echo ""
+    echo "请下载适合 $docker_arch Mac 的版本"
+    return 1
+}
+
+# macOS 直接下载安装 Docker 函数
+install_docker_directly_macos() {
+    local download_url="$1"
+    local arch_name="$2"
+    
+    print_info "直接下载 Docker Desktop for $arch_name Mac..."
+    
+    # 创建临时目录
+    local temp_dir=$(mktemp -d)
+    local dmg_file="$temp_dir/Docker.dmg"
+    
+    print_info "下载 Docker Desktop..."
+    print_info "下载地址: $download_url"
+    
+    # 下载 DMG 文件
+    if curl -L -o "$dmg_file" "$download_url"; then
+        print_success "下载完成"
+        
+        print_info "挂载 DMG 文件..."
+        # 挂载 DMG
+        local mount_point=$(hdiutil attach "$dmg_file" -nobrowse | grep "/Volumes" | awk '{print $3}')
+        
+        if [[ -n "$mount_point" && -d "$mount_point" ]]; then
+            print_success "DMG 挂载成功: $mount_point"
+            
+            # 查找 Docker.app
+            local docker_app="$mount_point/Docker.app"
+            if [[ -d "$docker_app" ]]; then
+                print_info "复制 Docker.app 到 Applications 目录..."
+                
+                # 如果已存在，先删除
+                if [[ -d "/Applications/Docker.app" ]]; then
+                    print_info "删除旧版本的 Docker.app..."
+                    rm -rf "/Applications/Docker.app"
+                fi
+                
+                # 复制应用
+                if cp -R "$docker_app" "/Applications/"; then
+                    print_success "Docker Desktop 安装完成"
+                    
+                    # 卸载 DMG
+                    print_info "清理安装文件..."
+                    hdiutil detach "$mount_point" &>/dev/null
+                    rm -rf "$temp_dir"
+                    
+                    # 询问是否启动
+                    echo ""
+                    read -p "是否现在启动 Docker Desktop? [y/N]: " -n 1 -r START_DOCKER
+                    echo
+                    if [[ $START_DOCKER =~ ^[Yy]$ ]]; then
+                        print_info "启动 Docker Desktop..."
+                        open -a Docker
+                        print_info "Docker Desktop 正在启动，请等待几分钟完成初始化"
+                        
+                        # 等待几秒让Docker开始启动
+                        sleep 3
+                        print_info "Docker Desktop 已启动，请在系统托盘中查看启动状态"
+                    fi
+                    
+                    return 0
+                else
+                    print_error "复制 Docker.app 失败"
+                fi
+            else
+                print_error "在 DMG 中未找到 Docker.app"
+            fi
+            
+            # 卸载 DMG
+            hdiutil detach "$mount_point" &>/dev/null
+        else
+            print_error "挂载 DMG 文件失败"
+        fi
+    else
+        print_error "下载 Docker Desktop 失败"
+        print_info "请检查网络连接或手动下载"
+    fi
+    
+    # 清理临时文件
+    rm -rf "$temp_dir"
+    
+    print_info "自动安装失败，请手动下载安装:"
+    echo "📥 下载地址: $download_url"
+    return 1
+}
+
+# macOS Colima 安装函数 (轻量级开源替代方案)
+install_colima_macos() {
+    print_info "安装 Colima - 轻量级 Docker 替代方案..."
+    
+    if ! command -v brew &> /dev/null; then
+        print_error "需要 Homebrew 来安装 Colima"
+        print_info "请先安装 Homebrew: https://brew.sh"
+        return 1
+    fi
+    
+    print_info "Colima 是一个轻量级的开源容器运行时，基于 Lima 和 containerd"
+    print_info "优点: 免费、轻量、原生支持 Apple Silicon"
+    print_info "缺点: 没有 GUI 界面，需要命令行操作"
+    echo ""
+    
+    read -p "是否继续安装 Colima? [y/N]: " -n 1 -r INSTALL_COLIMA
+    echo
+    if [[ ! $INSTALL_COLIMA =~ ^[Yy]$ ]]; then
+        print_info "取消 Colima 安装"
+        return 1
+    fi
+    
+    # 确定使用哪个 brew
+    local brew_cmd="brew"
+    local mac_arch=$(detect_mac_arch)
+    if [[ "$mac_arch" == "arm64" && -f "/opt/homebrew/bin/brew" ]]; then
+        brew_cmd="arch -arm64 /opt/homebrew/bin/brew"
+        print_info "使用 Apple Silicon 版本的 Homebrew"
+    elif [[ "$mac_arch" == "x86_64" && -f "/usr/local/bin/brew" ]]; then
+        brew_cmd="arch -x86_64 /usr/local/bin/brew"
+        print_info "使用 Intel 版本的 Homebrew"
+    fi
+    
+    # 安装 Docker CLI (如果未安装)
+    if ! command -v docker &> /dev/null; then
+        print_info "安装 Docker CLI..."
+        if ! $brew_cmd install docker; then
+            print_error "Docker CLI 安装失败"
+            return 1
+        fi
+    else
+        print_success "Docker CLI 已安装"
+    fi
+    
+    # 安装 Colima
+    print_info "安装 Colima..."
+    if $brew_cmd install colima; then
+        print_success "Colima 安装完成"
+        
+        # 启动 Colima
+        print_info "启动 Colima..."
+        if colima start; then
+            print_success "Colima 启动成功"
+            
+            # 验证 Docker 是否可用
+            if docker info &> /dev/null; then
+                print_success "Docker 环境已就绪"
+                print_info "您现在可以使用 docker 命令"
+                echo ""
+                print_info "常用 Colima 命令:"
+                echo "  colima start    - 启动 Colima"
+                echo "  colima stop     - 停止 Colima"
+                echo "  colima status   - 查看状态"
+                echo "  colima delete   - 删除 Colima VM"
+                return 0
+            else
+                print_warning "Colima 启动了但 Docker 命令不可用"
+                print_info "请检查 Docker CLI 配置"
+                return 1
+            fi
+        else
+            print_error "Colima 启动失败"
+            print_info "请尝试手动启动: colima start"
+            return 1
+        fi
+    else
+        print_error "Colima 安装失败"
+        return 1
+    fi
+}
+
+# Linux Docker 安装函数
+install_docker_linux() {
+    print_info "在 Linux 上安装 Docker..."
+    
+    # 检测 Linux 发行版
+    if command -v apt-get &> /dev/null; then
+        # Ubuntu/Debian
+        print_info "检测到 Ubuntu/Debian，使用官方安装脚本..."
+        
+        # 使用 Docker 官方便捷安装脚本
+        if curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh; then
+            print_success "Docker 安装完成"
+            
+            # 添加当前用户到 docker 组
+            if groups "$USER" | grep -q docker; then
+                print_success "用户已在 docker 组中"
+            else
+                print_info "将用户添加到 docker 组..."
+                if sudo usermod -aG docker "$USER"; then
+                    print_success "用户已添加到 docker 组"
+                    print_info "请重新登录或执行: newgrp docker"
+                fi
+            fi
+            
+            # 启动 Docker 服务
+            print_info "启动 Docker 服务..."
+            if sudo systemctl enable docker && sudo systemctl start docker; then
+                print_success "Docker 服务已启动并设置为开机自启"
+            fi
+            
+            # 清理安装脚本
+            rm -f get-docker.sh
+            return 0
+        else
+            print_error "Docker 安装脚本执行失败"
+            rm -f get-docker.sh
+        fi
+    elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
+        # Red Hat/CentOS/Fedora
+        print_info "检测到 Red Hat/CentOS/Fedora 系统"
+        local pkg_manager="yum"
+        if command -v dnf &> /dev/null; then
+            pkg_manager="dnf"
+        fi
+        
+        if sudo $pkg_manager install -y docker; then
+            print_success "Docker 安装完成"
+            
+            # 启动服务
+            if sudo systemctl enable docker && sudo systemctl start docker; then
+                print_success "Docker 服务已启动"
+            fi
+            
+            # 添加用户到 docker 组
+            if sudo usermod -aG docker "$USER"; then
+                print_success "用户已添加到 docker 组，请重新登录"
+            fi
+            
+            return 0
+        fi
+    elif command -v pacman &> /dev/null; then
+        # Arch Linux
+        print_info "检测到 Arch Linux"
+        if sudo pacman -S --noconfirm docker; then
+            print_success "Docker 安装完成"
+            
+            if sudo systemctl enable docker && sudo systemctl start docker; then
+                print_success "Docker 服务已启动"
+            fi
+            
+            if sudo usermod -aG docker "$USER"; then
+                print_success "用户已添加到 docker 组，请重新登录"
+            fi
+            
+            return 0
+        fi
+    fi
+    
+    # 回退到手动安装指导
+    print_error "自动安装失败，请手动安装 Docker"
+    print_info "参考官方文档: https://docs.docker.com/engine/install/"
     return 1
 }
 
@@ -425,7 +1563,7 @@ main() {
                 echo ""
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     # 检测 Apple Silicon 或 Intel Mac
-                    if [[ $(uname -m) == "arm64" ]]; then
+                    if [[ $(detect_mac_arch) == "arm64" ]]; then
                         echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.bashrc
                         echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
                         print_success "已添加 Homebrew (Apple Silicon) 到环境变量"
@@ -439,7 +1577,7 @@ main() {
             fi
         else
             print_warning "Homebrew 未安装，建议安装以便管理依赖"
-            if ask_install "Homebrew" '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'; then
+            if ask_install "Homebrew" '/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'; then
                 print_success "Homebrew 安装完成"
                 print_info "请重启终端或执行 Homebrew 的环境设置命令"
             fi
@@ -584,6 +1722,12 @@ main() {
     
     echo ""
     
+    # 检查 Docker 环境 (可选)
+    print_info "检查 Docker 环境 (用于跨平台构建)..."
+    check_docker
+    
+    echo ""
+    
     # 检查 Android NDK
     check_android_ndk
     
@@ -642,12 +1786,16 @@ main() {
             echo "ARM64 MinGW (windows-arm64):"
             echo "  当前Ubuntu版本不支持，可使用Docker或CI/CD方案"
             echo "  运行 './check-env.sh' 查看详细替代方案"
+            echo ""
+            echo "Docker 构建 (推荐用于跨平台):"
+            echo "  Docker 可以在任何系统上构建所有支持的平台"
+            echo "  运行 './check-env.sh' 安装和配置 Docker"
             
         elif [[ "$OS" == "macos" ]]; then
             echo ""
             echo "macOS 系统快速安装命令:"
             echo "  xcode-select --install"
-            echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            echo "  /bin/bash -c \"\$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)\""
             echo "  brew install meson ninja mingw-w64"
             echo ""
             echo "Android NDK 下载:"
@@ -656,6 +1804,10 @@ main() {
             echo ""
             echo "ARM64 MinGW (windows-arm64):"
             echo "  检查最新版mingw-w64是否包含ARM64支持"
+            echo ""
+            echo "Docker 构建 (推荐用于跨平台):"
+            echo "  Docker 可以在 macOS 上构建所有支持的平台"
+            echo "  运行 './check-env.sh' 安装和配置 Docker"
         fi
         
         exit 1

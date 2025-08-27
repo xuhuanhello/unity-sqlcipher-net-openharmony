@@ -5,3 +5,6 @@ Samples.meta
 # 忽略 MesonBuild~ 目录下的 subprojects 目录及其下所有文件/子目录
 MesonBuild~/subprojects/
 
+# 虽然全局配置忽略 *~ 结尾的文件/目录，但我们需要跟踪 exports/ 目录
+!MesonBuild~/exports/
+

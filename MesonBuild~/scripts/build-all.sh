@@ -21,18 +21,26 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "  debug|release   构建类型 (默认: release)"
     echo ""
     echo "支持的平台组:"
-    echo "  all      - 所有平台"
-    echo "  android  - Android 平台"
-    echo "  windows  - Windows 平台"
-    echo "  linux    - Linux 平台"
-    echo "  macos    - macOS 平台"
-    echo "  ios      - iOS 平台"
+    echo "  all         - 所有平台"
+    echo "  android     - Android 平台"
+    echo "  windows     - Windows 平台"
+    echo "  linux       - Linux 平台"
+    echo "  macos       - macOS 平台"
+    echo "  ios         - iOS 平台"
+    echo ""
+    echo "Docker平台组 (需要Docker环境):"
+    echo "  all-docker     - 所有支持Docker的平台"
+    echo "  android-docker - Android 平台 (Docker)"
+    echo "  windows-docker - Windows 平台 (Docker)"
+    echo "  linux-docker   - Linux 平台 (Docker)"
     echo ""
     echo "示例:"
     echo "  $0                        # 构建所有平台 (release)"
     echo "  $0 ios                    # 只构建iOS平台 (release)"
     echo "  $0 android debug          # 构建Android平台 (debug)"
     echo "  $0 all release            # 构建所有平台 (release)"
+    echo "  $0 android-docker release # 构建Android平台 (Docker)"
+    echo "  $0 all-docker debug       # 构建所有Docker平台 (debug)"
     exit 0
 fi
 
@@ -81,6 +89,35 @@ IOS_PLATFORMS=(
     "ios-simulator-x86_64"
 )
 
+# Docker平台组
+ALL_DOCKER_PLATFORMS=(
+    "windows-x86_64-docker"
+    "windows-x86-docker"
+    "windows-arm64-docker"
+    "linux-x86_64-docker"
+    "android-arm64-docker"
+    "android-arm32-docker"
+    "android-x86_64-docker"
+    "android-x86-docker"
+)
+
+ANDROID_DOCKER_PLATFORMS=(
+    "android-arm64-docker"
+    "android-arm32-docker"
+    "android-x86_64-docker"
+    "android-x86-docker"
+)
+
+WINDOWS_DOCKER_PLATFORMS=(
+    "windows-x86_64-docker"
+    "windows-x86-docker"
+    "windows-arm64-docker"
+)
+
+LINUX_DOCKER_PLATFORMS=(
+    "linux-x86_64-docker"
+)
+
 # 选择要构建的平台
 case "$PLATFORM_GROUP" in
     "all")
@@ -101,18 +138,34 @@ case "$PLATFORM_GROUP" in
     "ios")
         PLATFORMS=("${IOS_PLATFORMS[@]}")
         ;;
+    "all-docker")
+        PLATFORMS=("${ALL_DOCKER_PLATFORMS[@]}")
+        ;;
+    "android-docker")
+        PLATFORMS=("${ANDROID_DOCKER_PLATFORMS[@]}")
+        ;;
+    "windows-docker")
+        PLATFORMS=("${WINDOWS_DOCKER_PLATFORMS[@]}")
+        ;;
+    "linux-docker")
+        PLATFORMS=("${LINUX_DOCKER_PLATFORMS[@]}")
+        ;;
     *)
         echo "错误: 未知的平台组 '$PLATFORM_GROUP'"
         echo ""
         echo "用法: $0 [platform-group] [debug|release]"
         echo ""
         echo "支持的平台组:"
-        echo "  all      - 所有平台"
-        echo "  android  - Android 平台"
-        echo "  windows  - Windows 平台"
-        echo "  linux    - Linux 平台"
-        echo "  macos    - macOS 平台"
-        echo "  ios      - iOS 平台"
+        echo "  all            - 所有平台"
+        echo "  android        - Android 平台"
+        echo "  windows        - Windows 平台"
+        echo "  linux          - Linux 平台"
+        echo "  macos          - macOS 平台"
+        echo "  ios            - iOS 平台"
+        echo "  all-docker     - 所有Docker平台"
+        echo "  android-docker - Android 平台 (Docker)"
+        echo "  windows-docker - Windows 平台 (Docker)"
+        echo "  linux-docker   - Linux 平台 (Docker)"
         echo ""
         echo "示例: $0 ios release"
         exit 1
@@ -123,6 +176,35 @@ esac
 TOTAL_PLATFORMS=${#PLATFORMS[@]}
 SUCCESS_COUNT=0
 FAILED_PLATFORMS=()
+
+# 检查是否包含Docker平台
+DOCKER_PLATFORMS_COUNT=0
+for platform in "${PLATFORMS[@]}"; do
+    if [[ "$platform" == *-docker ]]; then
+        DOCKER_PLATFORMS_COUNT=$((DOCKER_PLATFORMS_COUNT + 1))
+    fi
+done
+
+# 如果包含Docker平台，检查Docker环境
+if [[ $DOCKER_PLATFORMS_COUNT -gt 0 ]]; then
+    echo "检测到 $DOCKER_PLATFORMS_COUNT 个Docker构建平台，检查Docker环境..."
+    
+    if ! command -v docker &> /dev/null; then
+        echo "错误: Docker 未安装"
+        echo "请先安装 Docker 或使用标准构建方式"
+        echo "安装Docker: ./scripts/check-env.sh"
+        exit 1
+    fi
+    
+    if ! docker info &> /dev/null; then
+        echo "错误: Docker 服务未运行"
+        echo "请启动 Docker 服务"
+        exit 1
+    fi
+    
+    echo "✓ Docker 环境检查通过"
+    echo ""
+fi
 
 echo "将构建 $TOTAL_PLATFORMS 个平台: ${PLATFORMS[*]}"
 echo ""

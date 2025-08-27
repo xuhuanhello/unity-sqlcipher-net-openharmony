@@ -1,0 +1,4 @@
+# macOS 符号导出列表
+# 只导出 SQLite/SQLCipher 公共 API (使用 cr_ 前缀)
+_cr_sqlite3_*
+_cr_sqlcipher_*
