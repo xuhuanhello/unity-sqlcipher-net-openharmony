@@ -12,8 +12,12 @@ PLATFORM="$1"
 BUILD_TYPE="${2:-release}"
 
 # 从第3个参数开始的所有参数都作为额外的 meson 选项
-shift 2 2>/dev/null || true
-EXTRA_MESON_OPTIONS="$@"
+if [[ $# -gt 2 ]]; then
+    shift 2
+    EXTRA_MESON_OPTIONS="$@"
+else
+    EXTRA_MESON_OPTIONS=""
+fi
 
 # 检查是否是Docker构建
 USE_DOCKER=false
@@ -193,7 +197,11 @@ build_with_docker() {
         docker_cmd="$docker_cmd bash -c 'export BATCH_BUILD=1 && ./scripts/build-platform.sh $platform $build_type $extra_options'"
     else
         # 标准镜像
-        docker_cmd="$docker_cmd bash -c 'export BATCH_BUILD=1 && ./scripts/build-platform.sh $platform $build_type $extra_options'"
+        if [[ -n "$extra_options" ]]; then
+            docker_cmd="$docker_cmd bash -c 'export BATCH_BUILD=1 && ./scripts/build-platform.sh $platform $build_type $extra_options'"
+        else
+            docker_cmd="$docker_cmd bash -c 'export BATCH_BUILD=1 && ./scripts/build-platform.sh $platform $build_type'"
+        fi
     fi
     
     echo "执行命令: $docker_cmd"
@@ -248,6 +256,7 @@ build_with_docker() {
 
 # 如果是Docker构建，直接调用Docker构建函数
 if [[ "$USE_DOCKER" == "true" ]]; then
+    # 对于 Docker 构建，传递真正的额外 meson 选项（不包括平台名称）
     build_with_docker "$PLATFORM" "$BUILD_TYPE" "$EXTRA_MESON_OPTIONS"
     exit 0
 fi

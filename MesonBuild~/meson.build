@@ -18,7 +18,7 @@ if host_machine.system() == 'darwin'
 endif
 
 # OpenSSL 依赖 (强制使用指定的 3.0.8 版本，不检查系统版本)
-# 为 macOS Universal Binary 和 iOS 构建禁用汇编优化以避免架构冲突
+# 为 macOS Universal Binary、iOS 和 Android x86 构建禁用汇编优化以避免架构冲突
 openssl_options = {}
 if host_machine.system() == 'darwin'
   # 在 macOS Universal Binary 和 iOS 构建中禁用汇编优化
@@ -30,6 +30,9 @@ if host_machine.system() == 'darwin'
       'default_library': 'static'
     }
   endif
+elif host_machine.system() == 'android' and host_machine.cpu_family() == 'x86'
+  # 在 Android x86 (32位) 构建中禁用汇编优化以避免原子操作问题
+  openssl_options = {'asm': 'disabled'}
 endif
 
 openssl_subproject = subproject('openssl', default_options : openssl_options)
