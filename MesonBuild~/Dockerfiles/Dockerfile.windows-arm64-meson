@@ -1,0 +1,12 @@
+# 基于mstorsjo/llvm-mingw，预装meson的Windows ARM64构建环境
+FROM mstorsjo/llvm-mingw:latest
+
+# 安装构建依赖
+RUN apt-get update -qq && \
+    apt-get install -y python3-pip && \
+    pip3 install --break-system-packages meson && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /workspace

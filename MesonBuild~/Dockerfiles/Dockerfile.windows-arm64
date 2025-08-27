@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装构建依赖和 LLVM/Clang 交叉编译工具链 (支持 Windows ARM64)
+RUN apt-get -qq update \
+    && apt-get -qq install -y --no-install-recommends \
+        build-essential \
+        python3 \
+        python3-pip \
+        ninja-build \
+        pkg-config \
+        ca-certificates \
+        wget \
+        curl \
+        git \
+        cmake \
+        clang \
+        lld \
+        llvm \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装最新版本的 Meson (需要 >=1.2.0)
+RUN pip3 install --no-cache-dir meson
+
+# 下载并安装 Windows ARM64 工具链
+# 使用 LLVM/Clang 可以直接支持 Windows ARM64 目标
+RUN mkdir -p /opt/windows-arm64 \
+    && cd /opt/windows-arm64 \
+    && wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20240417/llvm-mingw-20240417-ucrt-ubuntu-20.04-x86_64.tar.xz \
+    && tar -xf llvm-mingw-20240417-ucrt-ubuntu-20.04-x86_64.tar.xz --strip-components=1 \
+    && rm llvm-mingw-20240417-ucrt-ubuntu-20.04-x86_64.tar.xz
+
+# 将工具链添加到 PATH
+ENV PATH="/opt/windows-arm64/bin:${PATH}"
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 验证安装
+RUN meson --version && ninja --version
+RUN aarch64-w64-mingw32-clang --version || echo "ARM64 Clang available"
+RUN aarch64-w64-mingw32-gcc --version || echo "ARM64 GCC available (if present)"

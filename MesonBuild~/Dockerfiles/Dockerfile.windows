@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+FROM debian:12-slim
+
+# 安装构建依赖和 MinGW 交叉编译工具链
+RUN apt-get -qq update \
+    && apt-get -qq install -y --no-install-recommends \
+        build-essential \
+        python3 \
+        python3-pip \
+        ninja-build \
+        pkg-config \
+        ca-certificates \
+        gcc-mingw-w64-x86-64 \
+        gcc-mingw-w64-i686 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 尝试安装 ARM64 MinGW (如果可用)
+RUN apt-get -qq update \
+    && (apt-get -qq install -y --no-install-recommends gcc-aarch64-w64-mingw32 || echo "ARM64 MinGW not available in this distribution") \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装最新版本的 Meson (需要 >=1.2.0)
+RUN pip3 install --no-cache-dir --break-system-packages meson
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 验证安装
+RUN meson --version && ninja --version && x86_64-w64-mingw32-gcc --version && i686-w64-mingw32-gcc --version
+RUN (aarch64-w64-mingw32-gcc --version && echo "ARM64 MinGW available") || echo "ARM64 MinGW not available"
