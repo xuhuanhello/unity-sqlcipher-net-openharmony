@@ -1,5 +1,11 @@
-name: Build native libraries
-on: [push, pull_request]
+name: Build SQLCipher Native Libraries
+
+on: 
+  push:
+    branches: [ mesonbuild, main ]
+  pull_request:
+    branches: [ mesonbuild ]
+
 defaults:
   run:
     shell: bash
@@ -16,39 +22,217 @@ jobs:
       matrix:
         include:
           - platform: windows
-            target: docker-all-windows-llvm
+            targets: "windows-x86 windows-x86_64 windows-arm64"
+            dockerfile: Dockerfile.windows
           - platform: linux
-            target: docker-all-linux
+            targets: "linux-x86_64"
+            dockerfile: Dockerfile.linux
           - platform: android
-            target: docker-all-android
+            targets: "android-arm32 android-arm64 android-x86 android-x86_64"
+            dockerfile: Dockerfile.android
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - name: Cache Docker files
         uses: actions/cache@v4
         with:
-          path: $DOCKER_CACHE
-          key: ${{ matrix.platform }}
-      - name: Build
-        run: make -C Plugins ${{ matrix.target }} DOCKER_BUILD_ARGS="--cache-from type=gha --cache-to type=gha,mode=max"
-      - name: Upload artifact
+          path: ${{ env.DOCKER_CACHE }}
+          key: docker-${{ matrix.platform }}-${{ hashFiles(format('MesonBuild~/Dockerfiles/{0}', matrix.dockerfile)) }}
+          restore-keys: |
+            docker-${{ matrix.platform }}-
+      
+      - name: Build ${{ matrix.platform }} libraries
+        run: |
+          cd MesonBuild~
+          for target in ${{ matrix.targets }}; do
+            echo "Building $target..."
+            docker build -f Dockerfiles/${{ matrix.dockerfile }} \
+              --cache-from type=gha \
+              --cache-to type=gha,mode=max \
+              --build-arg PLATFORM=$target \
+              --build-arg BUILD_TYPE=release \
+              -t sqlcipher-builder-$target .
+            
+            # Run build inside container
+            docker run --rm \
+              -v $(pwd):/workspace \
+              -w /workspace \
+              sqlcipher-builder-$target \
+              ./scripts/build-platform.sh $target release
+          done
+      
+      - name: Upload ${{ matrix.platform }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gilzoide-sqlite-net-${{ matrix.platform }}
+          name: sqlcipher-net-${{ matrix.platform }}
           path: |
             Plugins/lib/${{ matrix.platform }}/**/*.dll
-            Plugins/lib/${{ matrix.platform }}/**/*.dylib
             Plugins/lib/${{ matrix.platform }}/**/*.so
+          retention-days: 30
 
   build_with_macos:
-    name: macOS
+    name: macOS and iOS
     runs-on: macos-latest
+    
     steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: make -C Plugins all-apple
-      - name: Upload artifact
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup build environment
+        run: |
+          cd MesonBuild~
+          ./scripts/check-env.sh
+      
+      - name: Build macOS Universal
+        run: |
+          cd MesonBuild~
+          ./scripts/build-platform.sh macos-universal release
+      
+      - name: Build iOS ARM64
+        run: |
+          cd MesonBuild~
+          ./scripts/build-platform.sh ios-arm64 release
+      
+      - name: Build iOS Simulator
+        run: |
+          cd MesonBuild~
+          ./scripts/build-platform.sh ios-simulator-arm64 release
+          ./scripts/build-platform.sh ios-simulator-x86_64 release
+      
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gilzoide-sqlite-net-macos
+          name: sqlcipher-net-macos
           path: |
             Plugins/lib/macos/*.dylib
+          retention-days: 30
+      
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlcipher-net-ios
+          path: |
+            Plugins/lib/ios/*.a
+          retention-days: 30
+
+  build_openharmony:
+    name: OpenHarmony
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup OpenHarmony SDK
+        run: |
+          cd MesonBuild~
+          # 设置非交互模式
+          export CI=true
+          ./scripts/check-env.sh
+        env:
+          OHOS_SDK_AUTO_INSTALL: "true"
+      
+      - name: Build OpenHarmony ARM64
+        run: |
+          cd MesonBuild~
+          ./scripts/build-platform.sh harmony-arm64 release
+        env:
+          OHOS_NDK_ROOT: /opt/ohos-sdk/5.1.0/native/native
+      
+      - name: Upload OpenHarmony artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlcipher-net-openharmony
+          path: |
+            Plugins/lib/OpenHarmony/**/*.so
+          retention-days: 30
+
+  create_release:
+    name: Create Release Package
+    needs: [build_with_docker, build_with_macos, build_openharmony]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/mesonbuild'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release package
+        run: |
+          mkdir -p release-package/Plugins/lib
+          
+          # Copy all platform libraries
+          for artifact in artifacts/sqlcipher-net-*/; do
+            if [ -d "$artifact" ]; then
+              cp -r "$artifact"/* release-package/Plugins/lib/ || true
+            fi
+          done
+          
+          # Copy other necessary files
+          cp -r Runtime release-package/ || true
+          cp -r Samples~ release-package/ || true
+          cp package.json release-package/ || true
+          cp README.md release-package/ || true
+          cp LICENSE.txt release-package/ || true
+          cp CHANGELOG.md release-package/ || true
+      
+      - name: Create release archive
+        run: |
+          cd release-package
+          tar -czf ../sqlcipher-net-unity-package.tar.gz .
+          cd ..
+          zip -r sqlcipher-net-unity-package.zip release-package/
+      
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlcipher-net-unity-complete
+          path: |
+            sqlcipher-net-unity-package.tar.gz
+            sqlcipher-net-unity-package.zip
+          retention-days: 90
+
+  test_build_results:
+    name: Test Build Results
+    needs: [build_with_docker, build_with_macos, build_openharmony]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: test-artifacts
+      
+      - name: Verify build results
+        run: |
+          echo "=== Build Results Verification ==="
+          
+          # Check each platform
+          for platform_dir in test-artifacts/sqlcipher-net-*/; do
+            if [ -d "$platform_dir" ]; then
+              platform_name=$(basename "$platform_dir")
+              echo "Checking $platform_name:"
+              
+              # List all library files
+              find "$platform_dir" -name "*.so" -o -name "*.dll" -o -name "*.dylib" -o -name "*.a" | while read file; do
+                echo "  ✓ $(basename "$file") ($(du -h "$file" | cut -f1))"
+                
+                # Basic file validation
+                if [ ! -s "$file" ]; then
+                  echo "  ❌ Empty file: $file"
+                  exit 1
+                fi
+              done
+              
+              echo ""
+            fi
+          done
+          
+          echo "=== All builds completed successfully! ==="
