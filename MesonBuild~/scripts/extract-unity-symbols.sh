@@ -76,11 +76,19 @@ else
 fi
 
 # 生成符号白名单格式（用于exports）
-EXPORTS_FILE="$SCRIPT_DIR/unity_symbols_exports.txt"
+EXPORTS_FILE="$SCRIPT_DIR/../exports/exports.ios.symbols"
 echo ""
 echo "🔧 生成符号导出白名单: $EXPORTS_FILE"
-sed 's/^/_/' "$OUTPUT_FILE" > "$EXPORTS_FILE"
-echo "  已生成 $(wc -l < "$EXPORTS_FILE") 个符号的导出白名单"
+# 确保exports目录存在
+mkdir -p "$(dirname "$EXPORTS_FILE")"
+# 添加注释头并生成符号列表
+{
+    echo "# iOS 符号导出列表 (自动生成)"
+    echo "# 只导出 SQLite/SQLCipher 公共 API (使用 cr_ 前缀)"
+    sed 's/^/_/' "$OUTPUT_FILE"
+    echo ""
+} > "$EXPORTS_FILE"
+echo "  已生成 $(grep -c '^_cr_' "$EXPORTS_FILE") 个符号的导出白名单"
 
 # 清理临时文件
 rm -f "$TEMP_FILE"

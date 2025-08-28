@@ -64,95 +64,114 @@ fi
 echo "使用专业的 ld -r + llvm-objcopy 符号控制方案..."
 
 # 检查是否有符号导出列表文件
-EXPORTS_FILE="$WORK_DIR/../exports.symbols"
+# 修正：直接使用正确的 exports.ios.symbols 路径
+SCRIPT_DIR="$(dirname "$0")"
+EXPORTS_FILE="$SCRIPT_DIR/../exports/exports.ios.symbols"
 if [[ -f "$EXPORTS_FILE" ]]; then
     echo "✅ 找到符号导出列表: $EXPORTS_FILE"
-    
+
     # 步骤1: 创建有效的SQLite符号白名单
     echo "步骤1: 创建有效的SQLite符号白名单..."
-    
-    # 创建包含常用SQLite API的白名单（已验证有效的方法）
-    # 检查是否存在Unity符号提取结果
-    # 查找Unity符号文件的多个可能位置
-    UNITY_SYMBOLS_FILE=""
-    for possible_path in \
-        "scripts/unity_symbols_exports.txt" \
-        "../scripts/unity_symbols_exports.txt" \
-        "$(dirname "$0")/unity_symbols_exports.txt" \
-        "/Users/xsmxu/Projects/sqlcipher-oh/unity-sqlcipher-net-openharmony/MesonBuild~/scripts/unity_symbols_exports.txt"; do
-        if [[ -f "$possible_path" ]]; then
-            UNITY_SYMBOLS_FILE="$possible_path"
-            break
-        fi
-    done
-    if [[ -f "$UNITY_SYMBOLS_FILE" ]]; then
-        echo "  ✅ 使用Unity完整符号列表: $UNITY_SYMBOLS_FILE"
-        
-        # 步骤1: 获取SQLite库中实际存在的符号（现在应该是cr_前缀）
-        echo "  🔍 检查SQLite库中实际存在的符号..."
-        SQLITE_OBJ=$(find . -name "*sqlite*.o" | head -1)
-        ACTUAL_SYMBOLS=$(mktemp)
-        # 检查带cr_前缀的符号（因为源代码已经被sed修改了）
-        nm "$SQLITE_OBJ" | grep "T _cr_sqlite3_" | awk '{print $3}' > "$ACTUAL_SYMBOLS"
-        echo "  📊 实际找到的带cr_前缀符号数: $(wc -l < "$ACTUAL_SYMBOLS")"
-        echo "  📋 前5个实际符号:"
-        head -5 "$ACTUAL_SYMBOLS"
-        
-        # 步骤2: 直接使用unity_symbols_exports.txt文件（已包含正确的cr_前缀）
-        echo "  🔧 使用Unity符号导出文件，过滤实际存在的符号..."
-        FILTERED_SYMBOLS=$(mktemp)
-        while read -r symbol; do
-            # 跳过空行
-            [[ -z "$symbol" ]] && continue
-            # 检查符号是否在实际编译的库中存在
-            if grep -q "^$symbol$" "$ACTUAL_SYMBOLS"; then
-                echo "$symbol" >> "$FILTERED_SYMBOLS"
-            else
-                echo "    ⚠️  跳过不存在的符号: $symbol"
-            fi
-        done < "$UNITY_SYMBOLS_FILE"
-        
-        # 步骤3: 添加SQLCipher特有的加密函数（如果存在）
-        for cipher_symbol in "_cr_sqlite3_key" "_cr_sqlite3_rekey"; do
-            if grep -q "^$cipher_symbol$" "$ACTUAL_SYMBOLS"; then
-                echo "$cipher_symbol" >> "$FILTERED_SYMBOLS"
-            fi
-        done
-        
-        # 步骤4: 去重排序
-        sort "$FILTERED_SYMBOLS" | uniq > exported_symbols.txt
-        
-        # 清理临时文件
-        rm -f "$ACTUAL_SYMBOLS" "$FILTERED_SYMBOLS"
-        
-        echo "  ✅ 过滤后的符号数量: $(wc -l < exported_symbols.txt)"
-    else
-        echo "  ⚠️  Unity符号文件不存在，直接导出所有cr_前缀的SQLite符号"
-        # 直接从SQLite目标文件中提取所有cr_前缀符号
-        SQLITE_OBJ=$(find . -name "*sqlite*.o" | head -1)
-        if [[ -f "$SQLITE_OBJ" ]]; then
-            nm "$SQLITE_OBJ" | grep "T _cr_sqlite3_" | awk '{print $3}' | sort > exported_symbols.txt
+
+    # 直接使用找到的符号导出文件
+    UNITY_SYMBOLS_FILE="$EXPORTS_FILE"
+    echo "  ✅ 使用Unity完整符号列表: $UNITY_SYMBOLS_FILE"
+
+    # 步骤1: 获取SQLite库中实际存在的符号（现在应该是cr_前缀）
+    echo "  🔍 检查SQLite库中实际存在的符号..."
+    SQLITE_OBJ=$(find . -name "*sqlite*.o" | head -1)
+    ACTUAL_SYMBOLS=$(mktemp)
+    # 检查带cr_前缀的符号（因为源代码已经被sed修改了）
+    nm "$SQLITE_OBJ" | grep "T _cr_sqlite3_" | awk '{print $3}' > "$ACTUAL_SYMBOLS"
+    echo "  📊 实际找到的带cr_前缀符号数: $(wc -l < "$ACTUAL_SYMBOLS")"
+    echo "  📋 前5个实际符号:"
+    head -5 "$ACTUAL_SYMBOLS"
+
+    # 步骤2: 直接使用exports.ios.symbols文件，过滤实际存在的符号
+    echo "  🔧 使用Unity符号导出文件，过滤实际存在的符号..."
+    FILTERED_SYMBOLS=$(mktemp)
+
+    # 读取符号导出文件，跳过注释行
+    while IFS= read -r line; do
+        # 跳过空行和注释行
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # 提取符号名（去除前后空格）
+        symbol=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [[ -z "$symbol" ]] && continue
+
+        # 检查符号是否在实际编译的库中存在
+        if grep -q "^$symbol$" "$ACTUAL_SYMBOLS"; then
+            echo "$symbol" >> "$FILTERED_SYMBOLS"
+            echo "    ✅ 导出符号: $symbol"
         else
-            echo "  ❌ 无法找到SQLite目标文件，跳过符号过滤"
-            touch exported_symbols.txt
+            echo "    ⚠️  跳过不存在的符号: $symbol"
         fi
-    fi
-    
+    done < "$UNITY_SYMBOLS_FILE"
+
+    # 步骤3: 去重排序
+    sort "$FILTERED_SYMBOLS" | uniq > exported_symbols.txt
+
+    # 清理临时文件
+    rm -f "$ACTUAL_SYMBOLS" "$FILTERED_SYMBOLS"
+
+    echo "  ✅ 过滤后的符号数量: $(wc -l < exported_symbols.txt)"
+
+
     echo "✅ SQLite API白名单创建完成 ($(wc -l < exported_symbols.txt) 个符号)"
     echo "前5个符号:"
     head -5 exported_symbols.txt
-    
+
     # 步骤2: 使用 ld -r 合并所有对象文件并控制符号可见性
     echo "步骤2: 使用 ld -r 合并对象文件并应用符号白名单..."
-    
+
     # 使用 ld -r 合并所有对象文件，包括SQLite对象文件
     echo "  正在合并对象文件..."
     ld -r -o combined.o *.o ..*.o
-    
-    # 应用符号白名单，只导出SQLite符号
+
+    # 修正：使用正确的符号控制方法
     echo "  正在应用符号白名单，隐藏OpenSSL符号..."
-    ld -r -exported_symbols_list exported_symbols.txt -o filtered.o combined.o
-    
+
+    # 检测操作系统类型
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "    检测到 macOS，使用 macOS 兼容的符号控制方法..."
+
+        # macOS 方法：使用 ld 的 -exported_symbols_list 选项
+        echo "    步骤1: 创建符号导出列表文件..."
+
+        # 创建 macOS ld 兼容的符号列表文件
+        cp exported_symbols.txt exported_symbols_ld.txt
+
+        echo "    步骤2: 使用 ld -r -exported_symbols_list 重新链接..."
+        # 使用 ld 的 -exported_symbols_list 选项来控制符号可见性
+        # 这会将未列出的符号标记为私有
+        ld -r -exported_symbols_list exported_symbols_ld.txt -o filtered.o combined.o
+
+        # 清理临时文件
+        rm -f exported_symbols_ld.txt
+
+    elif command -v objcopy >/dev/null 2>&1; then
+        echo "    使用 objcopy 方法控制符号..."
+        # 先将所有符号设为局部
+        objcopy --localize-symbols=<(nm combined.o | grep ' T ' | awk '{print $3}') combined.o temp1.o
+        # 再将需要的符号设为全局
+        objcopy --globalize-symbols=exported_symbols.txt temp1.o filtered.o
+        rm -f temp1.o
+
+    else
+        echo "    使用 GNU ld 方法控制符号..."
+        # 创建符号脚本文件（仅适用于 GNU ld）
+        echo "VERSION { EXPORTED { global:" > version_script.map
+        while read -r symbol; do
+            [[ -n "$symbol" ]] && echo "    $symbol;" >> version_script.map
+        done < exported_symbols.txt
+        echo "  local: *; }; }" >> version_script.map
+
+        # 使用版本脚本控制符号可见性
+        ld -r --version-script=version_script.map -o filtered.o combined.o
+        rm -f version_script.map
+    fi
+
     # 创建最终的静态库
     echo "  正在创建最终静态库..."
     ar crs "$WORK_DIR/$OUTPUT_LIB" filtered.o
@@ -175,7 +194,8 @@ if [[ -f "$EXPORTS_FILE" ]]; then
     echo "📝 库文件位置: $WORK_DIR/$OUTPUT_LIB"
 
 else
-    echo "⚠️  未找到符号导出列表，使用简单合并"
+    echo "❌ 未找到符号导出列表文件: $EXPORTS_FILE"
+    echo "⚠️  使用简单合并，无符号控制"
     # 明确包含所有对象文件（包括以..开头的SQLite文件）
     ar crs "$WORK_DIR/$OUTPUT_LIB" *.o ..*.o
 fi

@@ -51,3 +51,6 @@ _cr_sqlite3_shutdown
 _cr_sqlite3_step
 _cr_sqlite3_threadsafe
 _cr_sqlite3_win32_set_directory
+# SQLCipher 加密函数
+_cr_sqlite3_key
+_cr_sqlite3_rekey

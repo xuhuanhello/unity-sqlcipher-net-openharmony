@@ -140,7 +140,7 @@ elif host_system == 'darwin'
     # macOS Universal binary (arm64 + x86_64)
     platform_c_args += ['-arch', 'arm64', '-arch', 'x86_64']
     platform_link_args += ['-shared', '-arch', 'arm64', '-arch', 'x86_64']
-    # 保持默认名称，Meson 会自动添加 'lib' 前缀
+    # macOS 使用不带 lib 前缀的名称，以匹配 Unity DllImport
     library_suffix = '.dylib'
     install_dir = '../Plugins/lib/macos'
   endif
@@ -261,18 +261,31 @@ if install_dir != ''
   elif host_system == 'darwin' and (ios_sdk == 'iphoneos' or ios_sdk == 'iphonesimulator')
     # iOS 静态库，使用合并后的库文件名
     output_filename = 'lib' + library_name + library_suffix
+  elif host_system == 'darwin'
+    # macOS 动态库，使用不带 lib 前缀的名称以匹配 Unity DllImport
+    output_filename = library_name + library_suffix
   else
     # Unix-like 系统，Meson 会自动添加 'lib' 前缀
     output_filename = 'lib' + library_name + library_suffix
   endif
   
   # 根据平台选择正确的库文件进行安装
-  custom_target('install_lib',
-    input : final_lib,
-    output : 'install_completed.stamp',  # 使用 stamp 文件避免文件名冲突
-    command : ['cp', '@INPUT@', join_paths(meson.current_source_dir(), install_dir, output_filename)],
-    build_by_default : true
-  )
+  if host_system == 'darwin' and ios_sdk == ''
+    # macOS 需要重命名去掉 lib 前缀
+    custom_target('install_lib',
+      input : final_lib,
+      output : 'install_completed.stamp',  # 使用 stamp 文件避免文件名冲突
+      command : ['sh', '-c', 'cp @INPUT@ ' + join_paths(meson.current_source_dir(), install_dir, output_filename) + ' && install_name_tool -id "' + output_filename + '" ' + join_paths(meson.current_source_dir(), install_dir, output_filename)],
+      build_by_default : true
+    )
+  else
+    custom_target('install_lib',
+      input : final_lib,
+      output : 'install_completed.stamp',  # 使用 stamp 文件避免文件名冲突
+      command : ['cp', '@INPUT@', join_paths(meson.current_source_dir(), install_dir, output_filename)],
+      build_by_default : true
+    )
+  endif
 endif
 
 # iOS 静态库不需要Framework打包和代码签名
