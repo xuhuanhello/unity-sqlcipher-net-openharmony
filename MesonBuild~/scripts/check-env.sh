@@ -43,7 +43,14 @@ print_error() {
 ask_install() {
     local tool_name="$1"
     local install_cmd="$2"
-    
+
+    # 检查是否设置了自动安装环境变量
+    if [[ "$AUTO_INSTALL" == "true" || "$CI" == "true" ]]; then
+        print_info "自动安装模式: 正在安装 $tool_name..."
+        eval "$install_cmd"
+        return $?
+    fi
+
     # 检查是否在交互模式
     if [[ -t 0 ]]; then
         # 交互模式：无超时等待用户输入
@@ -55,13 +62,13 @@ ask_install() {
         print_info "非交互模式，使用默认选择: 不安装 $tool_name"
         return 1
     fi
-    
+
     # 如果输入为空，默认为 N
     if [[ -z "$REPLY" ]]; then
         print_info "使用默认选择: 不安装 $tool_name"
         return 1
     fi
-    
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "正在安装 $tool_name..."
         eval "$install_cmd"
@@ -189,6 +196,15 @@ check_env_var() {
     FAILED_CHECKS+=("$var_description")
     
     if [[ -n "$default_path" && -d "$default_path" ]]; then
+        # 检查是否设置了自动安装环境变量
+        if [[ "$AUTO_INSTALL" == "true" || "$CI" == "true" ]]; then
+            print_info "自动安装模式: 设置 $var_name 为默认路径 $default_path"
+            export "$var_name"="$default_path"
+            print_success "$var_description 已设置为: $default_path"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+            return 0
+        fi
+
         # 检查是否在交互模式
         if [[ -t 0 ]]; then
             # 交互模式：无超时等待用户输入
@@ -201,7 +217,7 @@ check_env_var() {
             print_info "如需使用，请手动执行: export $var_name=\"$default_path\""
             return 1
         fi
-        
+
         # 如果输入为空，默认为 N
         if [[ -z "$REPLY" ]]; then
             print_info "使用默认选择: 不自动设置环境变量"
@@ -1562,12 +1578,17 @@ install_harmony_sdk() {
         default_install_path="/opt/ohos-sdk/5.1.0"
     fi
     
-    echo ""
-    print_info "默认安装路径: $default_install_path"
-    read -p "是否使用默认路径? 或输入自定义路径 [回车使用默认]: " custom_path
-    
-    if [[ -n "$custom_path" ]]; then
-        default_install_path="$custom_path"
+    # 在自动安装模式下使用默认路径
+    if [[ "$AUTO_INSTALL" != "true" && "$CI" != "true" ]]; then
+        echo ""
+        print_info "默认安装路径: $default_install_path"
+        read -p "是否使用默认路径? 或输入自定义路径 [回车使用默认]: " custom_path
+
+        if [[ -n "$custom_path" ]]; then
+            default_install_path="$custom_path"
+        fi
+    else
+        print_info "自动安装模式: 使用默认路径 $default_install_path"
     fi
     
     # 创建安装目录

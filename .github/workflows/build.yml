@@ -10,13 +10,13 @@ defaults:
   run:
     shell: bash
 
-env:
-  DOCKER_CACHE: ${{ github.workspace }}/.docker-cache
+# 移除全局Docker缓存配置，改用GitHub Actions内置缓存
 
 jobs:
   build_with_docker:
     name: ${{ matrix.platform }}
     runs-on: ubuntu-latest
+    timeout-minutes: 120  # 设置超时时间防止无限等待
     strategy:
       fail-fast: false
       matrix:
@@ -35,46 +35,58 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Cache Docker files
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.DOCKER_CACHE }}
-          key: docker-${{ matrix.platform }}-${{ hashFiles(format('MesonBuild~/Dockerfiles/{0}', matrix.dockerfile)) }}
-          restore-keys: |
-            docker-${{ matrix.platform }}-
-      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build ${{ matrix.platform }} libraries
         run: |
           cd MesonBuild~
           for target in ${{ matrix.targets }}; do
             echo "Building $target..."
-            docker build -f Dockerfiles/${{ matrix.dockerfile }} \
+
+            # Build Docker image with proper caching
+            docker buildx build \
+              -f Dockerfiles/${{ matrix.dockerfile }} \
               --cache-from type=gha \
               --cache-to type=gha,mode=max \
               --build-arg PLATFORM=$target \
               --build-arg BUILD_TYPE=release \
-              -t sqlcipher-builder-$target .
-            
-            # Run build inside container
+              --load \
+              -t sqlcipher-builder-$target . || {
+                echo "Docker build failed for $target"
+                exit 1
+              }
+
+            # Run build inside container with error handling
             docker run --rm \
               -v $(pwd):/workspace \
               -w /workspace \
               sqlcipher-builder-$target \
-              ./scripts/build-platform.sh $target release
+              bash -c "./scripts/build-platform.sh $target release || { echo 'Build failed for $target'; exit 1; }"
           done
       
+      - name: List build outputs for debugging
+        run: |
+          echo "=== Checking build outputs ==="
+          find . -name "*.dll" -o -name "*.so" -o -name "*.dylib" -o -name "*.a" | head -20
+          echo "=== Plugins directory structure ==="
+          ls -la Plugins/ || echo "Plugins directory not found"
+          ls -la Plugins/lib/ || echo "Plugins/lib directory not found"
+
       - name: Upload ${{ matrix.platform }} artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sqlcipher-net-${{ matrix.platform }}
           path: |
-            Plugins/lib/${{ matrix.platform }}/**/*.dll
-            Plugins/lib/${{ matrix.platform }}/**/*.so
+            Plugins/lib/**/*.dll
+            Plugins/lib/**/*.so
+          if-no-files-found: warn
           retention-days: 30
 
   build_with_macos:
     name: macOS and iOS
     runs-on: macos-latest
+    timeout-minutes: 90
     
     steps:
       - name: Checkout code
@@ -101,25 +113,35 @@ jobs:
           ./scripts/build-platform.sh ios-simulator-arm64 release
           ./scripts/build-platform.sh ios-simulator-x86_64 release
       
+      - name: List macOS/iOS build outputs
+        run: |
+          echo "=== Checking macOS/iOS build outputs ==="
+          find . -name "*.dylib" -o -name "*.a" | head -20
+          echo "=== Plugins directory structure ==="
+          ls -la Plugins/lib/ || echo "Plugins/lib directory not found"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sqlcipher-net-macos
           path: |
-            Plugins/lib/macos/*.dylib
+            Plugins/lib/**/*.dylib
+          if-no-files-found: warn
           retention-days: 30
-      
+
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sqlcipher-net-ios
           path: |
-            Plugins/lib/ios/*.a
+            Plugins/lib/**/*.a
+          if-no-files-found: warn
           retention-days: 30
 
   build_openharmony:
     name: OpenHarmony
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     
     steps:
       - name: Checkout code
@@ -128,25 +150,56 @@ jobs:
       - name: Setup OpenHarmony SDK
         run: |
           cd MesonBuild~
-          # 设置非交互模式
+          # 设置非交互模式和自动安装
           export CI=true
-          ./scripts/check-env.sh
+          export DEBIAN_FRONTEND=noninteractive
+          export AUTO_INSTALL=true
+          export OHOS_SDK_AUTO_INSTALL=true
+
+          # 检查环境并自动安装SDK
+          timeout 1800 ./scripts/check-env.sh || {
+            echo "Environment setup failed or timed out"
+            exit 1
+          }
         env:
+          AUTO_INSTALL: "true"
           OHOS_SDK_AUTO_INSTALL: "true"
-      
+
+      - name: Verify OpenHarmony SDK Installation
+        run: |
+          # 查找实际的SDK路径
+          if [ -d "/opt/ohos-sdk" ]; then
+            find /opt/ohos-sdk -name "llvm" -type d | head -1
+            SDK_PATH=$(find /opt/ohos-sdk -name "native" -type d | head -1)
+            echo "Found SDK at: $SDK_PATH"
+            echo "OHOS_NDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
+          else
+            echo "OpenHarmony SDK not found, using fallback path"
+            echo "OHOS_NDK_ROOT=/opt/ohos-sdk/5.1.0/native" >> $GITHUB_ENV
+          fi
+
       - name: Build OpenHarmony ARM64
         run: |
           cd MesonBuild~
+          echo "Using OHOS_NDK_ROOT: $OHOS_NDK_ROOT"
+          ls -la "$OHOS_NDK_ROOT" || echo "SDK path not found"
           ./scripts/build-platform.sh harmony-arm64 release
-        env:
-          OHOS_NDK_ROOT: /opt/ohos-sdk/5.1.0/native/native
       
+      - name: List OpenHarmony build outputs
+        run: |
+          echo "=== Checking OpenHarmony build outputs ==="
+          find . -name "*.so" | grep -i harmony || echo "No OpenHarmony .so files found"
+          echo "=== Plugins directory structure ==="
+          ls -la Plugins/lib/ || echo "Plugins/lib directory not found"
+          ls -la Plugins/lib/OpenHarmony/ || echo "Plugins/lib/OpenHarmony directory not found"
+
       - name: Upload OpenHarmony artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sqlcipher-net-openharmony
           path: |
-            Plugins/lib/OpenHarmony/**/*.so
+            Plugins/lib/**/*.so
+          if-no-files-found: warn
           retention-days: 30
 
   create_release:
