@@ -6,7 +6,18 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+# 智能检测项目根目录
+if [[ -f "$SCRIPT_DIR/../cross-files/$1.ini" ]]; then
+    # 当前在MesonBuild~目录中（Docker环境或本地MesonBuild~目录）
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+elif [[ -f "$SCRIPT_DIR/../../MesonBuild~/cross-files/$1.ini" ]]; then
+    # 正常的项目结构
+    PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+else
+    # 回退到原始逻辑
+    PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+fi
 
 PLATFORM="$1"
 BUILD_TYPE="${2:-release}"
@@ -263,14 +274,27 @@ if [[ "$USE_DOCKER" == "true" ]]; then
 fi
 
 # 检查交叉编译文件是否存在
-CROSS_FILE="$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
-if [[ ! -f "$CROSS_FILE" ]]; then
-    echo "错误: 找不到交叉编译文件 $CROSS_FILE"
+# 根据PROJECT_ROOT的结构确定正确的路径
+if [[ -f "$PROJECT_ROOT/cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="$PROJECT_ROOT/cross-files/$PLATFORM.ini"
+elif [[ -f "$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
+else
+    echo "错误: 找不到交叉编译文件"
+    echo "尝试的路径:"
+    echo "  $PROJECT_ROOT/cross-files/$PLATFORM.ini"
+    echo "  $PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
     exit 1
 fi
 
 # 设置构建目录
-BUILD_DIR="$PROJECT_ROOT/MesonBuild~/build-$PLATFORM"
+if [[ -d "$PROJECT_ROOT/cross-files" ]]; then
+    # 当前在MesonBuild~目录中
+    BUILD_DIR="$PROJECT_ROOT/build-$PLATFORM"
+else
+    # 正常的项目结构
+    BUILD_DIR="$PROJECT_ROOT/MesonBuild~/build-$PLATFORM"
+fi
 
 # 清理之前的构建
 if [[ -d "$BUILD_DIR" ]]; then
@@ -380,7 +404,15 @@ else
 fi
 
 # 配置构建
-cd "$PROJECT_ROOT/MesonBuild~"
+# 确定正确的meson.build文件位置
+if [[ -f "$PROJECT_ROOT/meson.build" ]]; then
+    # 当前在MesonBuild~目录中
+    cd "$PROJECT_ROOT"
+else
+    # 正常的项目结构
+    cd "$PROJECT_ROOT/MesonBuild~"
+fi
+
 meson setup "$BUILD_DIR" \
     --cross-file="$CROSS_FILE" \
     $BUILD_TYPE_OPTION \

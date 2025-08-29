@@ -95,7 +95,12 @@ jobs:
       - name: Setup build environment
         run: |
           cd MesonBuild~
+          # 设置自动安装模式
+          export AUTO_INSTALL=true
+          export CI=true
           ./scripts/check-env.sh
+        env:
+          AUTO_INSTALL: "true"
       
       - name: Build macOS Universal
         run: |

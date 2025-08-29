@@ -1878,12 +1878,13 @@ main() {
     
     # 检查基础构建工具
     print_info "检查基础构建工具..."
-    check_command "meson" "Meson 构建系统" "pip3 install meson" true
-    
-    # 根据操作系统设置 ninja 安装命令
+
+    # 根据操作系统设置 meson 和 ninja 安装命令
     if [[ "$OS" == "macos" ]]; then
+        check_command "meson" "Meson 构建系统" "brew install meson" true
         check_command "ninja" "Ninja 构建工具" "brew install ninja" true
     else
+        check_command "meson" "Meson 构建系统" "pip3 install --break-system-packages meson" true
         check_command "ninja" "Ninja 构建工具" "sudo apt-get install -y ninja-build" true
     fi
     
@@ -2196,7 +2197,7 @@ main() {
             echo "  sudo apt-get update"
             echo "  sudo apt-get install -y build-essential meson ninja-build"
             echo "  sudo apt-get install -y gcc-mingw-w64-i686 gcc-mingw-w64-x86-64"
-            echo "  pip3 install meson"
+            echo "  pip3 install --break-system-packages meson  # 或使用虚拟环境"
             echo ""
             echo ""
             echo "Android NDK 下载:"
