@@ -326,18 +326,31 @@ if [[ "$USE_DOCKER" == "true" ]]; then
 fi
 
 # 检查交叉编译文件是否存在
-# 根据PROJECT_ROOT的结构确定正确的路径
-if [[ -f "$PROJECT_ROOT/cross-files/$PLATFORM.ini" ]]; then
+# 使用多种路径策略确保在不同环境中都能找到文件
+CROSS_FILE=""
+
+# 策略1: 相对于当前脚本目录
+if [[ -f "$(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="$(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini"
+# 策略2: 相对于PROJECT_ROOT
+elif [[ -f "$PROJECT_ROOT/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="$PROJECT_ROOT/cross-files/$PLATFORM.ini"
 elif [[ -f "$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
+# 策略3: 绝对路径查找
+elif [[ -f "/workspace/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="/workspace/MesonBuild~/cross-files/$PLATFORM.ini"
 else
     echo "错误: 找不到交叉编译文件"
     echo "尝试的路径:"
+    echo "  $(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini"
     echo "  $PROJECT_ROOT/cross-files/$PLATFORM.ini"
     echo "  $PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
+    echo "  /workspace/MesonBuild~/cross-files/$PLATFORM.ini"
     exit 1
 fi
+
+echo "使用交叉编译文件: $CROSS_FILE"
 
 # 设置构建目录
 if [[ -d "$PROJECT_ROOT/cross-files" ]]; then
