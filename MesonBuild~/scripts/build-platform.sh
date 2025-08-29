@@ -411,25 +411,18 @@ if [[ "$PLATFORM" == harmony-* ]]; then
     
     # 自动修复 OpenSSL 子项目对 HarmonyOS 的支持
     echo "🔧 正在修复 OpenSSL 子项目对 HarmonyOS 的支持..."
-    OPENSSL_MESON_FILE="subprojects/openssl-3.0.8/meson.build"
-    if [[ -f "$OPENSSL_MESON_FILE" ]]; then
-        # 检查是否已经包含 harmony 支持
-        if ! grep -q "is_linux = host_machine.system() in \['linux', 'android', 'harmony'\]" "$OPENSSL_MESON_FILE"; then
-            # 备份原文件
-            cp "$OPENSSL_MESON_FILE" "$OPENSSL_MESON_FILE.backup"
-            echo "📄 已备份原始文件: $OPENSSL_MESON_FILE.backup"
-            
-            # 应用修复
-            sed -i.tmp "s/is_linux = host_machine.system() in \['linux', 'android'\]/is_linux = host_machine.system() in ['linux', 'android', 'harmony']/" "$OPENSSL_MESON_FILE"
-            rm -f "$OPENSSL_MESON_FILE.tmp"
-            
-            echo "✅ OpenSSL 子项目已修复，现在支持 HarmonyOS"
+
+    # 使用专门的修复脚本
+    FIX_SCRIPT="$SCRIPT_DIR/fix-openssl-harmony.sh"
+    if [[ -f "$FIX_SCRIPT" ]]; then
+        if bash "$FIX_SCRIPT"; then
+            echo "✅ OpenSSL HarmonyOS 支持修复完成"
         else
-            echo "✅ OpenSSL 子项目已经支持 HarmonyOS，无需修复"
+            echo "⚠️  OpenSSL HarmonyOS 支持修复失败，但继续构建"
         fi
     else
-        echo "⚠️  OpenSSL 子项目文件不存在: $OPENSSL_MESON_FILE"
-        echo "   这可能是首次构建，Meson 会自动下载子项目"
+        echo "⚠️  OpenSSL修复脚本不存在: $FIX_SCRIPT"
+        echo "   OpenSSL子项目可能无法正确构建HarmonyOS版本"
     fi
     
     HARMONY_OPTIONS="-Dharmony_build=true -Dharmony_abi=$HARMONY_ABI -Dharmony_stl=$HARMONY_STL"
