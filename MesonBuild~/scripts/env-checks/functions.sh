@@ -331,7 +331,8 @@ check_harmony_sdk() {
 
         # 提供安装提示
         print_info "请下载并安装 HarmonyOS SDK:"
-        print_info "  Linux: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz"
-        print_info "  macOS: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-PUBLIC.tar.gz"
+        print_info "  Linux/Windows: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/ohos-sdk-windows_linux-public.tar.gz"
+        print_info "  macOS (Intel): https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/ohos-sdk-mac-public.tar.gz"
+        print_info "  macOS (M1/M2): https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz"
     fi
 }
