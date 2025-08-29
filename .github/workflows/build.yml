@@ -38,6 +38,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Setup dependencies for Docker build
+        run: |
+          cd MesonBuild~
+          # 确保subprojects目录存在并安装OpenSSL wrap
+          export AUTO_INSTALL=true
+          export CI=true
+          ./scripts/check-env.sh
+        env:
+          AUTO_INSTALL: "true"
+
       - name: Build ${{ matrix.platform }} libraries
         run: |
           cd MesonBuild~
