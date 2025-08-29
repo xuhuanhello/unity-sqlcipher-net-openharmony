@@ -110,14 +110,19 @@ check_command() {
     else
         if [[ "$required" == "true" ]]; then
             print_error "$name 未找到"
-            FAILED_CHECKS+=("$name")
-            
+
             if [[ -n "$install_cmd" ]]; then
                 if ask_install "$name" "$install_cmd"; then
                     print_success "$name 安装完成"
                     PASSED_CHECKS=$((PASSED_CHECKS + 1))
                     return 0
+                else
+                    # 用户拒绝安装或安装失败
+                    FAILED_CHECKS+=("$name")
                 fi
+            else
+                # 没有安装命令
+                FAILED_CHECKS+=("$name")
             fi
         else
             print_warning "$name 未找到 (可选)"
