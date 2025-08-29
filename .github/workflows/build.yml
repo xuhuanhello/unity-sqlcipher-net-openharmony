@@ -68,7 +68,12 @@ jobs:
               -v $(pwd):/workspace \
               -w /workspace \
               sqlcipher-builder-$target \
-              bash -c "./scripts/build-platform.sh $target release --auto-clean || { echo 'Build failed for $target'; exit 1; }"
+              bash -c "
+                # 在容器内安装OpenSSL依赖
+                ./scripts/check-build-environment.sh common --auto-accept || echo 'OpenSSL setup warning'
+                # 执行构建
+                ./scripts/build-platform.sh $target release --auto-clean || { echo 'Build failed for $target'; exit 1; }
+              "
           done
       
       - name: List build outputs for debugging
@@ -157,10 +162,16 @@ jobs:
       - name: Setup OpenHarmony SDK
         run: |
           cd MesonBuild~
-          # 使用新的参数化环境检查脚本
+          # 使用新的参数化环境检查脚本，允许失败
           timeout 1800 ./scripts/check-build-environment.sh openharmony --auto-accept || {
-            echo "Environment setup failed or timed out"
-            exit 1
+            echo "⚠️ OpenHarmony SDK自动安装失败，尝试手动设置"
+            # 尝试查找已存在的SDK
+            if [[ -d "/opt/ohos-sdk" ]]; then
+              export OHOS_NDK_ROOT="/opt/ohos-sdk/5.1.0/native"
+              echo "✅ 找到SDK路径: $OHOS_NDK_ROOT"
+            else
+              echo "❌ 未找到OpenHarmony SDK，构建可能失败"
+            fi
           }
         env:
           OHOS_SDK_AUTO_INSTALL: "true"
