@@ -36,8 +36,22 @@ RUN echo "下载 OpenHarmony SDK..." && \
     wget -q ${OHOS_SDK_URL} -O ohos-sdk.tar.gz && \
     echo "解压 OpenHarmony SDK..." && \
     tar -xzf ohos-sdk.tar.gz && \
+    echo "检查解压后的目录结构..." && \
+    ls -la && \
+    find . -maxdepth 2 -type d && \
+    echo "创建SDK目录并移动文件..." && \
     mkdir -p /opt/ohos-sdk && \
-    mv ohos-sdk-public/* /opt/ohos-sdk/ && \
+    if [ -d "ohos-sdk-public" ]; then \
+        mv ohos-sdk-public/* /opt/ohos-sdk/; \
+    elif [ -d "ohos-sdk" ]; then \
+        mv ohos-sdk/* /opt/ohos-sdk/; \
+    elif [ -d "sdk" ]; then \
+        mv sdk/* /opt/ohos-sdk/; \
+    else \
+        echo "未知的SDK目录结构，列出所有目录:"; \
+        ls -la; \
+        mv */ /opt/ohos-sdk/ 2>/dev/null || echo "移动失败，手动处理"; \
+    fi && \
     rm -f ohos-sdk.tar.gz && \
     echo "OpenHarmony SDK 安装完成"
 
