@@ -9,3 +9,4 @@ MesonBuild~/subprojects/
 !MesonBuild~/exports/
 !MesonBuild~/scripts/
 !MesonBuild~/Dockerfiles/
+!MesonBuild~/scripts/exports

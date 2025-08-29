@@ -1,11 +1,35 @@
 #!/bin/bash
 
 # 构建单个平台的脚本
-# 用法: ./build-platform.sh <platform> [debug|release] [additional-meson-options...]
+# 用法: ./build-platform.sh <platform> [debug|release] [选项...] [additional-meson-options...]
 
 set -e
 
+# 全局变量
+AUTO_CLEAN=${AUTO_CLEAN:-false}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 清理函数
+perform_cleanup() {
+    echo "  删除目录: $BUILD_DIR"
+    rm -rf "$BUILD_DIR"
+
+    # 清理对应的 .meta 文件
+    META_FILE="$BUILD_DIR.meta"
+    if [[ -f "$META_FILE" ]]; then
+        echo "  删除文件: $META_FILE"
+        rm -f "$META_FILE"
+    fi
+
+    echo "✅ 清理完成! 已释放 $BUILD_SIZE 空间"
+
+    # iOS特殊提示
+    if [[ "$PLATFORM" == ios-* ]]; then
+        echo "💡 iOS静态库已保留在: ../Plugins/lib/ios*/libgilzoide-sqlite-net.a"
+        echo "💡 该静态库可直接用于Unity的DllImport，包含自包含的OpenSSL"
+    fi
+}
 
 # 智能检测项目根目录
 if [[ -f "$SCRIPT_DIR/../cross-files/$1.ini" ]]; then
@@ -19,16 +43,39 @@ else
     PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 fi
 
-PLATFORM="$1"
-BUILD_TYPE="${2:-release}"
+# 解析命令行参数
+PLATFORM=""
+BUILD_TYPE="release"
+EXTRA_MESON_OPTIONS=""
 
-# 从第3个参数开始的所有参数都作为额外的 meson 选项
-if [[ $# -gt 2 ]]; then
-    shift 2
-    EXTRA_MESON_OPTIONS="$@"
-else
-    EXTRA_MESON_OPTIONS=""
-fi
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --auto-clean)
+            AUTO_CLEAN=true
+            shift
+            ;;
+        -h|--help)
+            PLATFORM="--help"
+            break
+            ;;
+        debug|release)
+            BUILD_TYPE="$1"
+            shift
+            ;;
+        *)
+            if [[ -z "$PLATFORM" ]]; then
+                PLATFORM="$1"
+            else
+                # 剩余参数作为额外的 meson 选项
+                EXTRA_MESON_OPTIONS="$EXTRA_MESON_OPTIONS $1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# 清理额外选项的前导空格
+EXTRA_MESON_OPTIONS="${EXTRA_MESON_OPTIONS# }"
 
 # 检查是否是Docker构建
 USE_DOCKER=false
@@ -41,7 +88,7 @@ if [[ "$PLATFORM" == *-docker ]]; then
 fi
 
 if [[ -z "$PLATFORM" || "$PLATFORM" == "-h" || "$PLATFORM" == "--help" ]]; then
-    echo "用法: $0 <platform> [debug|release] [additional-meson-options...]"
+    echo "用法: $0 <platform> [debug|release] [选项...] [additional-meson-options...]"
     echo ""
     echo "支持的平台:"
     echo "  windows-x86_64        - Windows 64位"
@@ -68,6 +115,9 @@ if [[ -z "$PLATFORM" || "$PLATFORM" == "-h" || "$PLATFORM" == "--help" ]]; then
     echo "  android-x86_64-docker        - Android x86_64 (Docker)"
     echo "  android-x86-docker           - Android x86 (Docker)"
     echo ""
+    echo "选项:"
+    echo "  --auto-clean                         - 构建完成后自动清理构建目录"
+    echo ""
     echo "示例:"
     echo "  $0 linux-x86_64 release                       # 标准构建"
     echo "  $0 android-arm64 debug                        # Android ARM64 调试版"
@@ -75,6 +125,7 @@ if [[ -z "$PLATFORM" || "$PLATFORM" == "-h" || "$PLATFORM" == "--help" ]]; then
     echo "  $0 ios-simulator-arm64 debug                  # iOS 模拟器版"
     echo "  $0 windows-x86_64 release                     # Windows 64位版"
     echo "  $0 windows-x86_64-docker release              # Windows 64位版 (Docker)"
+    echo "  $0 linux-x86_64 release --auto-clean          # 构建后自动清理"
     echo "  $0 linux-x86_64-docker debug                  # Linux 64位版 (Docker)"
     echo "  $0 android-arm64-docker release               # Android ARM64版 (Docker)"
     echo ""
@@ -238,24 +289,25 @@ build_with_docker() {
             fi
             
             echo ""
-            read -p "🧹 是否清理构建目录? [y/N] " -n 1 -r
-            echo
-            
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                echo "🗑️  正在清理构建目录..."
-                rm -rf "$BUILD_DIR"
-                
-                # 清理对应的 .meta 文件
-                META_FILE="$BUILD_DIR.meta"
-                if [[ -f "$META_FILE" ]]; then
-                    echo "  删除文件: $META_FILE"
-                    rm -f "$META_FILE"
-                fi
-                
-                echo "✅ 清理完成! 已释放 $BUILD_SIZE 空间"
+
+            # 检查是否需要自动清理
+            if [[ "$AUTO_CLEAN" == "true" ]]; then
+                echo "🗑️  自动清理模式: 正在清理构建目录..."
+                perform_cleanup
+            elif [[ "$CI" == "true" || -n "$GITHUB_ACTIONS" ]]; then
+                echo "ℹ️  CI环境: 跳过交互式清理，构建目录已保留"
+                echo "💡 构建目录: $BUILD_DIR"
             else
-                echo "⏭️  跳过清理，构建目录已保留"
-                echo "💡 稍后可使用以下命令清理: rm -rf \"$BUILD_DIR\""
+                read -p "🧹 是否清理构建目录? [y/N] " -n 1 -r
+                echo
+
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    echo "🗑️  正在清理构建目录..."
+                    perform_cleanup
+                else
+                    echo "⏭️  跳过清理，构建目录已保留"
+                    echo "💡 稍后可使用以下命令清理: rm -rf \"$BUILD_DIR\""
+                fi
             fi
         fi
     else
@@ -453,49 +505,28 @@ if [[ -d "$BUILD_DIR" && -z "$BATCH_BUILD" ]]; then
     
     echo ""
     
-    # Docker构建时不进行交互，将清理信息保存供后续处理
-    if [[ -n "$BATCH_BUILD" || -f /.dockerenv ]]; then
+    # 检查是否需要自动清理或跳过交互
+    if [[ "$AUTO_CLEAN" == "true" ]]; then
+        echo "🗑️  自动清理模式: 正在清理构建目录..."
+        perform_cleanup
+    elif [[ -f /.dockerenv ]]; then
         echo "ℹ️  Docker构建完成，清理选项将在容器外提供"
         # 保存构建信息供Docker构建完成后使用
         BUILD_INFO_FILE="/tmp/build_cleanup_info_${platform}.txt"
         echo "BUILD_DIR=$BUILD_DIR" > "$BUILD_INFO_FILE"
         echo "BUILD_SIZE_MB=$BUILD_SIZE_MB" >> "$BUILD_INFO_FILE"
         echo "PLATFORM=$platform" >> "$BUILD_INFO_FILE"
+    elif [[ -n "$BATCH_BUILD" || "$CI" == "true" || -n "$GITHUB_ACTIONS" ]]; then
+        echo "ℹ️  CI环境构建完成，跳过交互式清理"
+        echo "💡 构建目录已保留: $BUILD_DIR"
     else
         # 本地构建时保持交互
         read -p "🧹 是否清理构建目录以节省磁盘空间? [y/N] " -n 1 -r
         echo
-        
+
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "🗑️  正在清理构建目录..."
-        
-        # 检查清理脚本是否存在
-        CLEAN_SCRIPT="$SCRIPT_DIR/clean-builds.sh"
-        if [[ -f "$CLEAN_SCRIPT" ]]; then
-            # 使用专门的清理脚本（非交互模式）
-            echo "  删除目录: $BUILD_DIR"
-            rm -rf "$BUILD_DIR"
-            
-            # 清理对应的 .meta 文件
-            META_FILE="$BUILD_DIR.meta"
-            if [[ -f "$META_FILE" ]]; then
-                echo "  删除文件: $META_FILE"
-                rm -f "$META_FILE"
-            fi
-            
-            echo "✅ 清理完成! 已释放 $BUILD_SIZE 空间"
-        else
-            # 回退到简单清理
-            echo "  删除目录: $BUILD_DIR"
-            rm -rf "$BUILD_DIR"
-            echo "✅ 清理完成!"
-        fi
-        
-        # iOS特殊提示
-        if [[ "$PLATFORM" == ios-* ]]; then
-            echo "💡 iOS静态库已保留在: ../Plugins/lib/ios*/libgilzoide-sqlite-net.a"
-            echo "💡 该静态库可直接用于Unity的DllImport，包含自包含的OpenSSL"
-        fi
+            perform_cleanup
         else
             echo "⏭️  跳过清理，构建目录已保留"
         fi

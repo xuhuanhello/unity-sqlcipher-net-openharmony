@@ -41,8 +41,8 @@ jobs:
       - name: Setup dependencies for Docker build
         run: |
           cd MesonBuild~
-          # 只检查Docker构建需要的依赖 (OpenSSL subprojects)
-          ./scripts/check-env.sh ${{ matrix.platform }}-docker --auto-install
+          # 使用新的参数化环境检查脚本
+          ./scripts/check-build-environment.sh ${{ matrix.platform }}-docker --auto-accept
 
       - name: Build ${{ matrix.platform }} libraries
         run: |
@@ -63,12 +63,12 @@ jobs:
                 exit 1
               }
 
-            # Run build inside container with error handling
+            # Run build inside container with auto cleanup
             docker run --rm \
               -v $(pwd):/workspace \
               -w /workspace \
               sqlcipher-builder-$target \
-              bash -c "./scripts/build-platform.sh $target release || { echo 'Build failed for $target'; exit 1; }"
+              bash -c "./scripts/build-platform.sh $target release --auto-clean || { echo 'Build failed for $target'; exit 1; }"
           done
       
       - name: List build outputs for debugging
@@ -101,24 +101,24 @@ jobs:
       - name: Setup build environment
         run: |
           cd MesonBuild~
-          # 检查macOS和iOS构建环境
-          ./scripts/check-env.sh macos --auto-install
+          # 使用新的参数化环境检查脚本
+          ./scripts/check-build-environment.sh macos --auto-accept
       
       - name: Build macOS Universal
         run: |
           cd MesonBuild~
-          ./scripts/build-platform.sh macos-universal release
-      
+          ./scripts/build-platform.sh macos-universal release --auto-clean
+
       - name: Build iOS ARM64
         run: |
           cd MesonBuild~
-          ./scripts/build-platform.sh ios-arm64 release
-      
+          ./scripts/build-platform.sh ios-arm64 release --auto-clean
+
       - name: Build iOS Simulator
         run: |
           cd MesonBuild~
-          ./scripts/build-platform.sh ios-simulator-arm64 release
-          ./scripts/build-platform.sh ios-simulator-x86_64 release
+          ./scripts/build-platform.sh ios-simulator-arm64 release --auto-clean
+          ./scripts/build-platform.sh ios-simulator-x86_64 release --auto-clean
       
       - name: List macOS/iOS build outputs
         run: |
@@ -157,13 +157,12 @@ jobs:
       - name: Setup OpenHarmony SDK
         run: |
           cd MesonBuild~
-          # 只检查OpenHarmony构建环境
-          timeout 1800 ./scripts/check-env.sh openharmony --auto-install || {
+          # 使用新的参数化环境检查脚本
+          timeout 1800 ./scripts/check-build-environment.sh openharmony --auto-accept || {
             echo "Environment setup failed or timed out"
             exit 1
           }
         env:
-          AUTO_INSTALL: "true"
           OHOS_SDK_AUTO_INSTALL: "true"
 
       - name: Verify OpenHarmony SDK Installation
@@ -184,7 +183,7 @@ jobs:
           cd MesonBuild~
           echo "Using OHOS_NDK_ROOT: $OHOS_NDK_ROOT"
           ls -la "$OHOS_NDK_ROOT" || echo "SDK path not found"
-          ./scripts/build-platform.sh harmony-arm64 release
+          ./scripts/build-platform.sh harmony-arm64 release --auto-clean
       
       - name: List OpenHarmony build outputs
         run: |

@@ -1940,6 +1940,7 @@ show_help() {
     echo "  linux                  - Linux 本地构建环境"
     echo "  linux-docker           - Linux Docker 构建环境"
     echo "  windows                - Windows 交叉编译环境"
+    echo "  windows-docker         - Windows Docker 构建环境"
     echo "  android                - Android 构建环境"
     echo "  android-docker         - Android Docker 构建环境"
     echo "  macos                  - macOS 本地构建环境"
@@ -2183,7 +2184,7 @@ main() {
                 auto_install=true
                 export AUTO_INSTALL=true
                 ;;
-            all|common|linux|linux-docker|windows|android|android-docker|macos|ios|openharmony)
+            all|common|linux|linux-docker|windows|windows-docker|android|android-docker|macos|ios|openharmony)
                 platform="$1"
                 ;;
             *)
@@ -2244,6 +2245,11 @@ main() {
         "windows")
             check_common_tools
             check_windows_specific
+            ;;
+        "windows-docker")
+            # Docker环境只需要检查OpenSSL依赖
+            print_info "检查 Windows Docker 构建环境..."
+            check_meson_subprojects
             ;;
         "android")
             check_common_tools
