@@ -157,7 +157,7 @@ jobs:
 
   create_release:
     name: Create Release Package
-    needs: [build_with_docker, build_with_macos, build_openharmony]
+    needs: [build_with_docker, build_with_macos]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/mesonbuild'
     
@@ -207,7 +207,7 @@ jobs:
 
   test_build_results:
     name: Test Build Results
-    needs: [build_with_docker, build_with_macos, build_openharmony]
+    needs: [build_with_docker, build_with_macos]
     runs-on: ubuntu-latest
     
     steps:
