@@ -39,7 +39,9 @@ openssl_subproject = subproject('openssl', default_options : openssl_options)
 openssl_dep = openssl_subproject.get_variable('libcrypto_dep')
 
 # 源文件路径 (现在应该是 SQLCipher 源码)
-sqlite_src = '../Plugins/sqlite-amalgamation/sqlite3.c'
+# 使用绝对路径以支持Docker构建
+project_root = meson.current_source_dir() / '..'
+sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
 
 # SQLCipher 编译定义 - 现在通过头文件统一配置
 sqlcipher_c_args = [
@@ -48,7 +50,7 @@ sqlcipher_c_args = [
   '-include', 'stdint.h',              # 强制包含 stdint.h 头文件
   
   # 强制包含 SQLite/SQLCipher 配置文件
-  '-include', join_paths(meson.current_source_dir(), '../Plugins/sqlite-amalgamation/sqlite3_defines.h'),
+  '-include', project_root / 'Plugins/sqlite-amalgamation/sqlite3_defines.h',
 ]
 
 # 符号隐藏配置 (防止 OpenSSL 符号冲突)
