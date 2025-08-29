@@ -178,15 +178,35 @@ jobs:
 
       - name: Verify OpenHarmony SDK Installation
         run: |
-          # 查找实际的SDK路径
-          if [ -d "/opt/ohos-sdk" ]; then
-            find /opt/ohos-sdk -name "llvm" -type d | head -1
-            SDK_PATH=$(find /opt/ohos-sdk -name "native" -type d | head -1)
-            echo "Found SDK at: $SDK_PATH"
-            echo "OHOS_NDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
+          # 查找实际的SDK路径 - 使用正确的嵌套路径
+          echo "🔍 查找OpenHarmony SDK..."
+
+          # 检查可能的SDK路径
+          SDK_PATHS=(
+            "/opt/ohos-sdk/5.1.0/native/native"
+            "/opt/ohos-sdk/native/native"
+            "/usr/local/ohos-sdk/native/native"
+          )
+
+          FOUND_SDK=""
+          for path in "${SDK_PATHS[@]}"; do
+            if [[ -d "$path" ]]; then
+              FOUND_SDK="$path"
+              echo "✅ 找到SDK: $path"
+              break
+            fi
+          done
+
+          if [[ -n "$FOUND_SDK" ]]; then
+            echo "OHOS_NDK_ROOT=$FOUND_SDK" >> $GITHUB_ENV
+            echo "PATH=$FOUND_SDK/llvm/bin:$PATH" >> $GITHUB_ENV
+            echo "✅ 已设置环境变量: OHOS_NDK_ROOT=$FOUND_SDK"
           else
-            echo "OpenHarmony SDK not found, using fallback path"
-            echo "OHOS_NDK_ROOT=/opt/ohos-sdk/5.1.0/native" >> $GITHUB_ENV
+            echo "❌ 未找到OpenHarmony SDK"
+            echo "尝试列出 /opt/ohos-sdk 目录结构:"
+            find /opt/ohos-sdk -type d -name "native" 2>/dev/null || echo "未找到native目录"
+            # 设置回退路径
+            echo "OHOS_NDK_ROOT=/opt/ohos-sdk/5.1.0/native/native" >> $GITHUB_ENV
           fi
 
       - name: Build OpenHarmony ARM64

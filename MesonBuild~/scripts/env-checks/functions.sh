@@ -258,46 +258,80 @@ install_openssl_wrap_force() {
 check_harmony_sdk() {
     print_info "检查 HarmonyOS SDK..."
 
+    # 检查正确的SDK路径结构 - 使用嵌套的native路径
+    local default_sdk_paths=(
+        "/opt/ohos-sdk/5.1.0/native/native"
+        "/opt/ohos-sdk/native/native"
+        "$HOME/ohos-sdk/5.1.0/native/native"
+        "$HOME/ohos-sdk/native/native"
+        "/usr/local/ohos-sdk/native/native"
+    )
+
+    local found_sdk=""
+    for path in "${default_sdk_paths[@]}"; do
+        if [[ -d "$path" ]]; then
+            found_sdk="$path"
+            break
+        fi
+    done
+
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
 
     if [[ -n "$OHOS_NDK_ROOT" && -d "$OHOS_NDK_ROOT" ]]; then
-        print_success "HarmonyOS SDK 已设置: $OHOS_NDK_ROOT"
+        print_success "HarmonyOS NDK 路径已设置: $OHOS_NDK_ROOT"
         PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        return 0
-    else
-        print_warning "HarmonyOS SDK 未设置或路径不存在"
 
-        # 检查常见的安装路径
-        local common_paths=(
-            "/opt/ohos-sdk/5.1.0/native"
-            "/opt/ohos-sdk/native"
-            "$HOME/ohos-sdk/5.1.0/native"
-            "$HOME/ohos-sdk/native"
+        # 检查关键工具链文件
+        local tools=(
+            "$OHOS_NDK_ROOT/llvm/bin/clang"
+            "$OHOS_NDK_ROOT/llvm/bin/clang++"
+            "$OHOS_NDK_ROOT/sysroot"
         )
 
-        for path in "${common_paths[@]}"; do
-            if [[ -d "$path" ]]; then
-                print_info "发现 HarmonyOS SDK: $path"
-                if [[ "$AUTO_ACCEPT" == "true" ]]; then
-                    export OHOS_NDK_ROOT="$path"
-                    print_success "HarmonyOS SDK 已自动设置: $path"
-                    PASSED_CHECKS=$((PASSED_CHECKS + 1))
-                    return 0
-                else
-                    read -p "是否使用此路径? [y/N]: " -n 1 -r
-                    echo ""
-                    if [[ $REPLY =~ ^[Yy]$ ]]; then
-                        export OHOS_NDK_ROOT="$path"
-                        print_success "HarmonyOS SDK 已设置: $path"
-                        PASSED_CHECKS=$((PASSED_CHECKS + 1))
-                        return 0
-                    fi
-                fi
+        local missing_tools=()
+        for tool in "${tools[@]}"; do
+            if [[ ! -e "$tool" ]]; then
+                missing_tools+=("$(basename "$tool")")
             fi
         done
 
-        WARNINGS+=("HarmonyOS SDK")
-        print_info "请设置环境变量: export OHOS_NDK_ROOT=/path/to/ohos-sdk/native"
-        return 1
+        if [[ ${#missing_tools[@]} -eq 0 ]]; then
+            print_success "HarmonyOS NDK 工具链完整"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        else
+            print_error "HarmonyOS NDK 工具链不完整，缺少: ${missing_tools[*]}"
+            FAILED_CHECKS+=("HarmonyOS NDK 工具链")
+        fi
+        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+
+    elif [[ -n "$found_sdk" ]]; then
+        print_warning "找到 HarmonyOS SDK 但环境变量未设置: $found_sdk"
+        print_info "建议设置环境变量: export OHOS_NDK_ROOT=\"$found_sdk\""
+
+        if [[ "$AUTO_ACCEPT" == "true" ]]; then
+            # 自动设置环境变量
+            export OHOS_NDK_ROOT="$found_sdk"
+            export PATH="$OHOS_NDK_ROOT/llvm/bin:$PATH"
+
+            # 在GitHub Actions中设置环境变量
+            if [[ -n "$GITHUB_ENV" ]]; then
+                echo "OHOS_NDK_ROOT=$found_sdk" >> "$GITHUB_ENV"
+                echo "PATH=$OHOS_NDK_ROOT/llvm/bin:$PATH" >> "$GITHUB_ENV"
+                print_success "已设置GitHub Actions环境变量"
+            fi
+
+            print_success "HarmonyOS SDK 已自动设置: $found_sdk"
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        else
+            WARNINGS+=("HarmonyOS NDK 环境变量未设置")
+        fi
+    else
+        print_error "未找到 HarmonyOS SDK"
+        FAILED_CHECKS+=("HarmonyOS SDK")
+
+        # 提供安装提示
+        print_info "请下载并安装 HarmonyOS SDK:"
+        print_info "  Linux: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz"
+        print_info "  macOS: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-PUBLIC.tar.gz"
     fi
 }
