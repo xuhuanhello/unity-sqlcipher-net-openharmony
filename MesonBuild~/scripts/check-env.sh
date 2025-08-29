@@ -1945,7 +1945,8 @@ show_help() {
     echo "  android-docker         - Android Docker 构建环境"
     echo "  macos                  - macOS 本地构建环境"
     echo "  ios                    - iOS 构建环境"
-    echo "  openharmony            - OpenHarmony 构建环境"
+    echo "  openharmony            - OpenHarmony 构建环境
+  openharmony-docker     - OpenHarmony Docker 构建环境"
     echo ""
     echo "选项:"
     echo "  -h, --help             - 显示此帮助信息"
@@ -2184,7 +2185,7 @@ main() {
                 auto_install=true
                 export AUTO_INSTALL=true
                 ;;
-            all|common|linux|linux-docker|windows|windows-docker|android|android-docker|macos|ios|openharmony)
+            all|common|linux|linux-docker|windows|windows-docker|android|android-docker|macos|ios|openharmony|openharmony-docker)
                 platform="$1"
                 ;;
             *)
@@ -2271,6 +2272,10 @@ main() {
         "openharmony")
             check_common_tools
             check_openharmony_specific
+            ;;
+        "openharmony-docker")
+            # Docker环境只需要检查OpenSSL依赖，SDK在Docker镜像中已安装
+            check_meson_subprojects
             ;;
     esac
 

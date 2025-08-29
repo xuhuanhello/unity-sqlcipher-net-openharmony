@@ -1,0 +1,58 @@
+# OpenHarmony 构建环境 Dockerfile
+# 基于 Ubuntu 22.04，包含 OpenHarmony SDK 和构建工具
+
+FROM ubuntu:22.04
+
+# 设置非交互模式
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装基础依赖
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    ninja-build \
+    python3 \
+    python3-pip \
+    wget \
+    curl \
+    unzip \
+    tar \
+    git \
+    pkg-config \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Meson
+RUN pip3 install meson
+
+# 设置工作目录
+WORKDIR /opt
+
+# 下载并安装 OpenHarmony SDK
+ENV OHOS_SDK_VERSION=5.1.0
+ENV OHOS_SDK_URL=https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz
+
+RUN echo "下载 OpenHarmony SDK..." && \
+    wget -q ${OHOS_SDK_URL} -O ohos-sdk.tar.gz && \
+    echo "解压 OpenHarmony SDK..." && \
+    tar -xzf ohos-sdk.tar.gz && \
+    mkdir -p /opt/ohos-sdk && \
+    mv L2-SDK-PUBLIC/* /opt/ohos-sdk/ && \
+    rm -f ohos-sdk.tar.gz && \
+    echo "OpenHarmony SDK 安装完成"
+
+# 设置 OpenHarmony 环境变量
+ENV OHOS_NDK_ROOT=/opt/ohos-sdk/5.1.0/native/native
+ENV PATH=${OHOS_NDK_ROOT}/llvm/bin:${PATH}
+
+# 验证 SDK 安装
+RUN echo "验证 OpenHarmony SDK 安装..." && \
+    ls -la ${OHOS_NDK_ROOT}/llvm/bin/ | head -5 && \
+    ${OHOS_NDK_ROOT}/llvm/bin/clang --version && \
+    echo "OpenHarmony SDK 验证完成"
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 默认命令
+CMD ["/bin/bash"]

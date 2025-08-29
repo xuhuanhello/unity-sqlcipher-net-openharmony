@@ -30,6 +30,9 @@ jobs:
           - platform: android
             targets: "android-arm32 android-arm64 android-x86 android-x86_64"
             dockerfile: Dockerfile.android
+          - platform: openharmony
+            targets: "harmony-arm64"
+            dockerfile: Dockerfile.openharmony
     
     steps:
       - name: Checkout code
@@ -150,84 +153,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  build_openharmony:
-    name: OpenHarmony
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup OpenHarmony SDK
-        run: |
-          cd MesonBuild~
-          # 使用环境检查脚本安装OpenSSL依赖，跳过SDK检查
-          echo "� 安装OpenSSL依赖..."
-          ./scripts/check-build-environment.sh common --auto-accept || echo "OpenSSL安装完成"
 
-          # 手动设置模拟的OpenHarmony环境
-          echo "� 设置模拟OpenHarmony环境..."
-
-          # 创建模拟的SDK目录结构
-          sudo mkdir -p /opt/ohos-sdk/5.1.0/native/native/llvm/bin
-          sudo mkdir -p /opt/ohos-sdk/5.1.0/native/native/sysroot
-
-          # 创建模拟的工具链文件（指向系统clang）
-          sudo ln -sf /usr/bin/clang /opt/ohos-sdk/5.1.0/native/native/llvm/bin/clang
-          sudo ln -sf /usr/bin/clang++ /opt/ohos-sdk/5.1.0/native/native/llvm/bin/clang++
-          sudo ln -sf /usr/bin/ar /opt/ohos-sdk/5.1.0/native/native/llvm/bin/llvm-ar
-          sudo ln -sf /usr/bin/strip /opt/ohos-sdk/5.1.0/native/native/llvm/bin/llvm-strip
-
-          # 设置环境变量
-          echo "OHOS_NDK_ROOT=/opt/ohos-sdk/5.1.0/native/native" >> $GITHUB_ENV
-          echo "PATH=/opt/ohos-sdk/5.1.0/native/native/llvm/bin:$PATH" >> $GITHUB_ENV
-
-          echo "✅ OpenHarmony模拟环境设置完成"
-          echo "注意: 这是用于CI测试的模拟环境，使用系统工具链"
-        env:
-          OHOS_SDK_AUTO_INSTALL: "true"
-
-      - name: Verify OpenHarmony SDK Installation
-        run: |
-          echo "🔍 验证OpenHarmony模拟环境..."
-
-          # 验证环境变量
-          echo "OHOS_NDK_ROOT: $OHOS_NDK_ROOT"
-
-          # 验证工具链
-          echo "验证工具链文件:"
-          ls -la "$OHOS_NDK_ROOT/llvm/bin/" | head -10
-
-          # 测试编译器
-          echo "测试编译器:"
-          "$OHOS_NDK_ROOT/llvm/bin/clang" --version || echo "编译器测试失败"
-
-          echo "✅ OpenHarmony模拟环境验证完成"
-
-      - name: Build OpenHarmony ARM64
-        run: |
-          cd MesonBuild~
-          echo "Using OHOS_NDK_ROOT: $OHOS_NDK_ROOT"
-          ls -la "$OHOS_NDK_ROOT" || echo "SDK path not found"
-          ./scripts/build-platform.sh harmony-arm64 release --auto-clean
-      
-      - name: List OpenHarmony build outputs
-        run: |
-          echo "=== Checking OpenHarmony build outputs ==="
-          find . -name "*.so" | grep -i harmony || echo "No OpenHarmony .so files found"
-          echo "=== Plugins directory structure ==="
-          ls -la Plugins/lib/ || echo "Plugins/lib directory not found"
-          ls -la Plugins/lib/OpenHarmony/ || echo "Plugins/lib/OpenHarmony directory not found"
-
-      - name: Upload OpenHarmony artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sqlcipher-net-openharmony
-          path: |
-            Plugins/lib/**/*.so
-          if-no-files-found: warn
-          retention-days: 30
 
   create_release:
     name: Create Release Package
