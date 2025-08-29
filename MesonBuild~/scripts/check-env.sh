@@ -1910,20 +1910,38 @@ check_harmony_sdk() {
     fi
 }
 
-# 主函数
-main() {
-    echo "========================================"
-    echo "Unity SQLCipher 编译环境检查"
-    echo "========================================"
+# 显示帮助信息
+show_help() {
+    echo "Unity SQLCipher 编译环境检查工具"
     echo ""
-    
-    # 检测操作系统
-    OS=$(detect_os)
-    print_info "检测到操作系统: $OS"
+    echo "用法: $0 [平台] [选项]"
     echo ""
-    
-    # 检查基础构建工具
-    print_info "检查基础构建工具..."
+    echo "支持的平台:"
+    echo "  all                    - 检查所有平台 (默认)"
+    echo "  common                 - 只检查通用工具 (meson, ninja, openssl)"
+    echo "  linux                  - Linux 本地构建环境"
+    echo "  linux-docker           - Linux Docker 构建环境"
+    echo "  windows                - Windows 交叉编译环境"
+    echo "  android                - Android 构建环境"
+    echo "  android-docker         - Android Docker 构建环境"
+    echo "  macos                  - macOS 本地构建环境"
+    echo "  ios                    - iOS 构建环境"
+    echo "  openharmony            - OpenHarmony 构建环境"
+    echo ""
+    echo "选项:"
+    echo "  -h, --help             - 显示此帮助信息"
+    echo "  --auto-install         - 自动安装缺失的工具"
+    echo ""
+    echo "示例:"
+    echo "  $0                     # 检查所有平台"
+    echo "  $0 common              # 只检查通用工具"
+    echo "  $0 linux-docker        # 只检查Linux Docker环境"
+    echo "  $0 android --auto-install # 自动安装Android环境"
+}
+
+# 检查通用工具 (所有构建都需要)
+check_common_tools() {
+    print_info "检查通用构建工具..."
 
     # 根据操作系统设置 meson 和 ninja 安装命令
     if [[ "$OS" == "macos" ]]; then
@@ -1933,183 +1951,69 @@ main() {
         check_command "meson" "Meson 构建系统" "pip3 install --break-system-packages meson" true
         check_command "ninja" "Ninja 构建工具" "sudo apt-get install -y ninja-build" true
     fi
-    
-    # 根据操作系统检查特定工具
+
+    # 检查 Meson 子项目依赖 (OpenSSL)
+    print_info "检查 Meson 子项目依赖..."
+    check_meson_subprojects
+}
+
+# 检查Linux特定环境
+check_linux_specific() {
+    print_info "检查 Linux 特定构建环境..."
+    check_package "build-essential" "构建基础工具" "sudo apt-get update && sudo apt-get install -y build-essential"
+}
+
+# 检查Windows交叉编译环境
+check_windows_specific() {
+    print_info "检查 Windows 交叉编译工具链..."
+
     if [[ "$OS" == "linux" ]]; then
-        print_info "检查 Linux 构建环境..."
-        
-        # 检查 build-essential
-        check_package "build-essential" "构建基础工具" "sudo apt-get update && sudo apt-get install -y build-essential"
-        
-        # 检查 MinGW 交叉编译工具链
-        print_info "检查 Windows 交叉编译工具链..."
         check_command "i686-w64-mingw32-gcc" "MinGW 32位交叉编译器 (windows-x86)" "sudo apt-get install -y gcc-mingw-w64-i686" false
         check_command "x86_64-w64-mingw32-gcc" "MinGW 64位交叉编译器 (windows-x86_64)" "sudo apt-get install -y gcc-mingw-w64-x86-64" false
-        
-        # 检查 ARM64 交叉编译器
-        print_info "检查 ARM64 MinGW 交叉编译器..."
-        if command -v aarch64-w64-mingw32-gcc &> /dev/null; then
-            print_success "MinGW ARM64交叉编译器 (windows-arm64) 已安装"
-            PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        else
-            print_warning "MinGW ARM64交叉编译器 (windows-arm64) 未找到"
-            
-            # 检查是否可以通过临时仓库安装
-            ubuntu_version=$(get_ubuntu_version)
-            print_info "检测到 Ubuntu $ubuntu_version"
-            
-            # 首先检查当前仓库是否有该包
-            if check_package_available "gcc-aarch64-w64-mingw32"; then
-                print_info "当前仓库支持直接安装"
-                if ask_install "ARM64 MinGW工具链" "sudo apt-get install -y gcc-aarch64-w64-mingw32"; then
-                    print_success "ARM64 MinGW工具链安装完成"
-                    PASSED_CHECKS=$((PASSED_CHECKS + 1))
-                else
-                    WARNINGS+=("MinGW ARM64交叉编译器")
-                fi
-            else
-                print_info "当前仓库不包含ARM64 MinGW工具链"
-                suggest_arm64_mingw_alternatives
-                WARNINGS+=("MinGW ARM64交叉编译器")
-            fi
-        fi
-        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-        
     elif [[ "$OS" == "macos" ]]; then
-        print_info "检查 macOS 构建环境..."
-        
-        # 检查完整的 Xcode 安装
-        print_info "检查 Xcode 环境..."
-        if command -v xcodebuild &> /dev/null; then
-            xcode_version=$(xcodebuild -version 2>/dev/null | head -n1 || echo "未知版本")
-            print_success "Xcode 已安装: $xcode_version"
+        if ask_install "MinGW-w64 完整工具链" "brew install mingw-w64"; then
+            print_success "MinGW-w64 工具链安装完成"
+            print_info "现在支持 windows-x86 和 windows-x86_64 目标"
             PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        else
-            print_warning "Xcode 未安装，仅检测到命令行工具"
-            print_info "对于完整的开发环境，建议从 App Store 安装 Xcode"
-            WARNINGS+=("完整 Xcode")
-        fi
-        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-        
-        # 检查 Xcode 命令行工具
-        if xcode-select -p &> /dev/null; then
-            xcode_path=$(xcode-select -p)
-            print_success "Xcode 命令行工具已安装: $xcode_path"
-            PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        else
-            print_error "Xcode 命令行工具未安装"
-            FAILED_CHECKS+=("Xcode 命令行工具")
-            if ask_install "Xcode 命令行工具" "xcode-select --install"; then
-                print_success "Xcode 命令行工具安装完成"
-                print_info "请重启终端或执行: source ~/.bashrc"
-                PASSED_CHECKS=$((PASSED_CHECKS + 1))
-            fi
-        fi
-        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-        
-        # 检查 Homebrew
-        print_info "检查包管理器..."
-        if command -v brew &> /dev/null; then
-            brew_version=$(brew --version 2>/dev/null | head -n1 || echo "未知版本")
-            print_success "Homebrew 已安装: $brew_version"
-            
-            # 检查 Homebrew 环境变量
-            if [[ ":$PATH:" != *":/opt/homebrew/bin:"* ]] && [[ ":$PATH:" != *":/usr/local/bin:"* ]]; then
-                print_warning "Homebrew 可能未正确添加到 PATH"
-                echo ""
-                read -p "是否自动添加 Homebrew 到环境变量? [y/N]: " -n 1 -r
-                echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    # 检测 Apple Silicon 或 Intel Mac
-                    if [[ $(detect_mac_arch) == "arm64" ]]; then
-                        echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.bashrc
-                        echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
-                        print_success "已添加 Homebrew (Apple Silicon) 到环境变量"
-                    else
-                        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
-                        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
-                        print_success "已添加 Homebrew (Intel) 到环境变量"
-                    fi
-                    print_info "请重启终端或执行: source ~/.bashrc"
-                fi
-            fi
-        else
-            print_warning "Homebrew 未安装，建议安装以便管理依赖"
-            if ask_install "Homebrew" '/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"'; then
-                print_success "Homebrew 安装完成"
-                print_info "请重启终端或执行 Homebrew 的环境设置命令"
-            fi
-        fi
-        
-        # 检查 ninja (macOS)
-        if ! command -v ninja &> /dev/null; then
-            check_command "ninja" "Ninja 构建工具" "brew install ninja" true
-        fi
-        
-        # 检查 MinGW 交叉编译工具链 (macOS)
-        print_info "检查 Windows 交叉编译工具链..."
-        
-        # 在macOS上，mingw-w64通过Homebrew安装，包含所有架构
-        if command -v x86_64-w64-mingw32-gcc &> /dev/null; then
-            print_success "MinGW-w64 工具链已安装"
-            
-            # 检查各个架构
-            if command -v i686-w64-mingw32-gcc &> /dev/null; then
-                print_success "MinGW 32位交叉编译器 (windows-x86) 可用"
-                PASSED_CHECKS=$((PASSED_CHECKS + 1))
-            fi
-            TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-            
-            if command -v x86_64-w64-mingw32-gcc &> /dev/null; then
-                print_success "MinGW 64位交叉编译器 (windows-x86_64) 可用"
-                PASSED_CHECKS=$((PASSED_CHECKS + 1))
-            fi
-            TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-            
-            # macOS上检查ARM64 MinGW（较新版本的mingw-w64可能包含）
-            if command -v aarch64-w64-mingw32-gcc &> /dev/null; then
-                print_success "MinGW ARM64交叉编译器 (windows-arm64) 可用"
-                PASSED_CHECKS=$((PASSED_CHECKS + 1))
-            else
-                print_warning "MinGW ARM64交叉编译器 (windows-arm64) 不可用"
-                print_info "当前Homebrew的mingw-w64可能不包含ARM64支持"
-                WARNINGS+=("MinGW ARM64交叉编译器")
-            fi
-            TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-            
-        else
-            print_warning "MinGW-w64 工具链未安装"
-            if ask_install "MinGW-w64 完整工具链" "brew install mingw-w64"; then
-                print_success "MinGW-w64 工具链安装完成"
-                print_info "现在支持 windows-x86 和 windows-x86_64 目标"
-                
-                # 重新检查ARM64支持
-                if command -v aarch64-w64-mingw32-gcc &> /dev/null; then
-                    print_success "同时获得了 ARM64 支持 (windows-arm64)"
-                else
-                    print_info "当前版本不包含 ARM64 支持"
-                fi
-                
-                PASSED_CHECKS=$((PASSED_CHECKS + 3))  # x86, x86_64, 可能的ARM64
-            else
-                FAILED_CHECKS+=("MinGW-w64 工具链")
-            fi
-            TOTAL_CHECKS=$((TOTAL_CHECKS + 3))
         fi
     fi
-    
-    echo ""
-    
-    # 检查 Meson 子项目依赖
-    print_info "检查 Meson 子项目依赖..."
-    
-    # 检查 OpenSSL wrap 配置
+}
+
+# 检查Android特定环境
+check_android_specific() {
+    print_info "检查 Android 特定构建环境..."
+    check_env_var "ANDROID_NDK_ROOT" "Android NDK 路径" "/opt/android-ndk" "Android NDK"
+}
+
+# 检查macOS特定环境
+check_macos_specific() {
+    print_info "检查 macOS 特定构建环境..."
+    check_xcode
+    check_homebrew
+}
+
+# 检查iOS特定环境
+check_ios_specific() {
+    print_info "检查 iOS 特定构建环境..."
+    check_xcode
+}
+
+# 检查OpenHarmony特定环境
+check_openharmony_specific() {
+    print_info "检查 OpenHarmony 特定构建环境..."
+    check_harmony_sdk
+}
+
+# 检查Meson子项目依赖 (OpenSSL)
+check_meson_subprojects() {
+    print_info "检查 OpenSSL wrap 配置..."
+
     # 获取脚本所在目录，然后找到MesonBuild~根目录
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     meson_build_dir="$(dirname "$script_dir")"
     subprojects_dir="$meson_build_dir/subprojects"
     openssl_wrap_file="$subprojects_dir/openssl.wrap"
-    
+
     # 确保 subprojects 目录存在
     if [[ ! -d "$subprojects_dir" ]]; then
         print_info "创建 subprojects 目录: $subprojects_dir"
@@ -2122,12 +2026,12 @@ main() {
             return 1
         fi
     fi
-    
+
     if [[ -f "$openssl_wrap_file" ]]; then
         openssl_version=$(grep 'wrapdb_version' "$openssl_wrap_file" | cut -d'=' -f2 | tr -d ' ')
         print_success "OpenSSL wrap 配置已存在: v$openssl_version"
         PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        
+
         # 检查是否已下载
         openssl_subproject_dir="$meson_build_dir/subprojects/openssl-3.0.8"
         if [[ -d "$openssl_subproject_dir" ]]; then
@@ -2140,12 +2044,12 @@ main() {
     else
         print_error "缺少 OpenSSL wrap 配置文件"
         FAILED_CHECKS+=("OpenSSL wrap 配置")
-        
+
         echo ""
         print_info "OpenSSL wrap 配置文件不存在，需要安装依赖"
         print_info "将在MesonBuild~目录安装: $meson_build_dir"
         echo ""
-        
+
         # 在自动安装模式下强制安装
         if [[ "$AUTO_INSTALL" == "true" || "$CI" == "true" ]]; then
             print_info "自动安装模式: 强制安装 OpenSSL wrap..."
@@ -2182,36 +2086,118 @@ main() {
         fi
     fi
     TOTAL_CHECKS=$((TOTAL_CHECKS + 2))
-    
+}
+
+# 主函数 - 支持平台参数
+main() {
+    local platform="all"
+    local auto_install=false
+
+    # 解析命令行参数
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            --auto-install)
+                auto_install=true
+                export AUTO_INSTALL=true
+                ;;
+            all|common|linux|linux-docker|windows|android|android-docker|macos|ios|openharmony)
+                platform="$1"
+                ;;
+            *)
+                echo "未知参数: $1"
+                echo "使用 $0 --help 查看帮助"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    # 如果设置了环境变量，启用自动安装
+    if [[ "$AUTO_INSTALL" == "true" || "$CI" == "true" ]]; then
+        auto_install=true
+    fi
+
+    # 检测操作系统
+    OS=$(detect_os)
+
+    echo "========================================"
+    echo "Unity SQLCipher 编译环境检查"
+    echo "========================================"
+    print_info "检测到操作系统: $OS"
+    print_info "检查平台: $platform"
+    if [[ "$auto_install" == "true" ]]; then
+        print_info "自动安装模式: 启用"
+    fi
     echo ""
     
-    # 检查 Docker 环境 (可选)
-    print_info "检查 Docker 环境 (用于跨平台构建)..."
-    check_docker
-    
+    # 根据平台执行相应的检查
+    case "$platform" in
+        "all")
+            check_common_tools
+            if [[ "$OS" == "linux" ]]; then
+                check_linux_specific
+                check_windows_specific
+                check_android_specific
+            elif [[ "$OS" == "macos" ]]; then
+                check_macos_specific
+                check_ios_specific
+                check_windows_specific
+                check_android_specific
+            fi
+            check_openharmony_specific
+            ;;
+        "common")
+            check_common_tools
+            ;;
+        "linux")
+            check_common_tools
+            check_linux_specific
+            ;;
+        "linux-docker")
+            # Docker环境只需要检查OpenSSL依赖
+            print_info "检查 Linux Docker 构建环境..."
+            check_meson_subprojects
+            ;;
+        "windows")
+            check_common_tools
+            check_windows_specific
+            ;;
+        "android")
+            check_common_tools
+            check_android_specific
+            ;;
+        "android-docker")
+            # Docker环境只需要检查OpenSSL依赖
+            print_info "检查 Android Docker 构建环境..."
+            check_meson_subprojects
+            ;;
+        "macos")
+            check_common_tools
+            check_macos_specific
+            ;;
+        "ios")
+            check_common_tools
+            check_ios_specific
+            ;;
+        "openharmony")
+            check_common_tools
+            check_openharmony_specific
+            ;;
+    esac
+
     echo ""
-    
-    # 检查 Android NDK
-    print_info "调用 Android NDK 检查..."
-    check_android_ndk
-    print_info "Android NDK 检查完成"
-    
-    echo ""
-    
-    # 检查 HarmonyOS SDK
-    print_info "开始检查 HarmonyOS SDK..."
-    check_harmony_sdk
-    print_info "HarmonyOS SDK 检查完成"
-    
-    echo ""
-    
+
     # 输出检查结果
     echo "========================================"
     echo "环境检查结果汇总:"
     echo "========================================"
     print_info "总检查项目: $TOTAL_CHECKS"
     print_success "通过检查: $PASSED_CHECKS"
-    
+
     if [[ ${#FAILED_CHECKS[@]} -gt 0 ]]; then
         print_error "失败检查: ${#FAILED_CHECKS[@]}"
         echo "失败项目:"
@@ -2219,7 +2205,7 @@ main() {
             echo "  - $item"
         done
     fi
-    
+
     if [[ ${#WARNINGS[@]} -gt 0 ]]; then
         print_warning "警告项目: ${#WARNINGS[@]}"
         echo "警告项目:"
@@ -2227,11 +2213,11 @@ main() {
             echo "  - $item"
         done
     fi
-    
+
     echo ""
-    
+
     if [[ ${#FAILED_CHECKS[@]} -eq 0 ]]; then
-        print_success "所有必需的工具都已安装，环境检查通过！"
+        print_success "环境检查通过！"
         echo ""
         print_info "你现在可以运行构建脚本:"
         echo "  ./build-all.sh"
@@ -2240,62 +2226,31 @@ main() {
     else
         print_error "环境检查未完全通过，请安装缺失的工具"
         echo ""
-        print_info "安装指南:"
-        
-        if [[ "$OS" == "linux" ]]; then
-            echo ""
-            echo "Ubuntu/Debian 系统快速安装命令:"
-            echo "  sudo apt-get update"
-            echo "  sudo apt-get install -y build-essential meson ninja-build"
-            echo "  sudo apt-get install -y gcc-mingw-w64-i686 gcc-mingw-w64-x86-64"
-            echo "  pip3 install --break-system-packages meson  # 或使用虚拟环境"
-            echo ""
-            echo ""
-            echo "Android NDK 下载:"
-            echo "  https://developer.android.com/ndk/downloads"
-            echo "  解压后设置 ANDROID_NDK_ROOT 环境变量"
-            echo ""
-            echo "HarmonyOS SDK 下载:"
-            echo "  Linux版本: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-LINUX-PUBLIC.tar.gz"
-            echo "  解压后设置 OHOS_NDK_ROOT 环境变量"
-            echo "  或运行 './check-env.sh' 自动下载安装"
-            echo ""
-            echo "ARM64 MinGW (windows-arm64):"
-            echo "  当前Ubuntu版本不支持，可使用Docker或CI/CD方案"
-            echo "  运行 './check-env.sh' 查看详细替代方案"
-            echo ""
-            echo "Docker 构建 (推荐用于跨平台):"
-            echo "  Docker 可以在任何系统上构建所有支持的平台"
-            echo "  运行 './check-env.sh' 安装和配置 Docker"
-            
-        elif [[ "$OS" == "macos" ]]; then
-            echo ""
-            echo "macOS 系统快速安装命令:"
-            echo "  xcode-select --install"
-            echo "  /bin/bash -c \"\$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)\""
-            echo "  brew install meson ninja mingw-w64"
-            echo ""
-            echo "Android NDK 下载:"
-            echo "  https://developer.android.com/ndk/downloads"
-            echo "  解压后设置 ANDROID_NDK_ROOT 环境变量"
-            echo ""
-            echo "HarmonyOS SDK 下载:"
-            echo "  Intel Mac: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-PUBLIC.tar.gz"
-            echo "  Apple Silicon: https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz"
-            echo "  解压后设置 OHOS_NDK_ROOT 环境变量"
-            echo "  或运行 './check-env.sh' 自动下载安装"
-            echo ""
-            echo "ARM64 MinGW (windows-arm64):"
-            echo "  检查最新版mingw-w64是否包含ARM64支持"
-            echo ""
-            echo "Docker 构建 (推荐用于跨平台):"
-            echo "  Docker 可以在 macOS 上构建所有支持的平台"
-            echo "  运行 './check-env.sh' 安装和配置 Docker"
-        fi
-        
+        print_info "重新运行: $0 $platform --auto-install"
         exit 1
     fi
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # 脚本入口 - 只有直接运行脚本时才执行主函数
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
