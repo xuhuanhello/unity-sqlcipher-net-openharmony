@@ -189,9 +189,13 @@ build_with_docker() {
             dockerfile_name="Dockerfile.linux"
             image_name="sqlcipher-build-linux"
             ;;
+        harmony-*)
+            dockerfile_name="Dockerfile.openharmony"
+            image_name="sqlcipher-build-openharmony"
+            ;;
         *)
             echo "错误: 平台 $platform 不支持 Docker 构建"
-            echo "支持的 Docker 构建平台: android-*, windows-*, linux-*"
+            echo "支持的 Docker 构建平台: android-*, windows-*, linux-*, harmony-*"
             exit 1
             ;;
     esac
