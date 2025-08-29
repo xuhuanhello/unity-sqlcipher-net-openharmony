@@ -44,8 +44,14 @@ jobs:
       - name: Setup dependencies for Docker build
         run: |
           cd MesonBuild~
-          # 使用新的参数化环境检查脚本
-          ./scripts/check-build-environment.sh ${{ matrix.platform }}-docker --auto-accept
+          # 检查Docker环境和OpenSSL依赖
+          echo "🐳 检查Docker环境..."
+          docker --version
+          docker info
+
+          # 检查OpenSSL依赖（所有Docker构建都需要）
+          echo "🔧 检查OpenSSL依赖..."
+          ./scripts/check-build-environment.sh common --auto-accept
 
       - name: Build ${{ matrix.platform }} libraries
         run: |

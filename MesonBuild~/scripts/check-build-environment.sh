@@ -17,18 +17,24 @@ if [[ ! -s "$ENV_CHECKS_DIR/check-env-common.sh" ]]; then
     echo "检测到模块文件为空，回退到原脚本..."
 
     # 设置参数并调用原脚本
-    if [[ "$*" == *"--auto-accept"* ]]; then
-        export AUTO_INSTALL=true
-        export CI=true
-    fi
-
-    # 移除--auto-accept参数，保留其他参数
     args=()
+    auto_install=false
+
+    # 解析参数
     for arg in "$@"; do
-        if [[ "$arg" != "--auto-accept" ]]; then
+        if [[ "$arg" == "--auto-accept" ]]; then
+            auto_install=true
+        else
             args+=("$arg")
         fi
     done
+
+    # 设置环境变量
+    if [[ "$auto_install" == "true" ]]; then
+        export AUTO_INSTALL=true
+        export CI=true
+        args+=("--auto-install")
+    fi
 
     # 调用原脚本
     exec "$SCRIPT_DIR/check-env.sh" "${args[@]}"
@@ -141,7 +147,7 @@ main() {
             --auto-accept)
                 export AUTO_ACCEPT=true
                 ;;
-            all|common|linux|linux-docker|windows|windows-docker|android|android-docker|macos|ios|openharmony)
+            all|common|linux|linux-docker|windows|windows-docker|android|android-docker|macos|ios|openharmony|openharmony-docker)
                 platform="$1"
                 ;;
             *)
