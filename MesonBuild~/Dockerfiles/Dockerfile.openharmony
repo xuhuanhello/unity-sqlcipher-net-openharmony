@@ -44,8 +44,14 @@ RUN echo "下载 OpenHarmony SDK..." && \
 
 # 查找并设置正确的 OpenHarmony 环境变量
 RUN echo "查找OpenHarmony NDK路径..." && \
+    echo "完整的SDK目录结构:" && \
+    find /opt/ohos-sdk -type d | head -20 && \
+    echo "查找native目录:" && \
     find /opt/ohos-sdk -name "native" -type d && \
+    echo "查找llvm目录:" && \
     find /opt/ohos-sdk -name "llvm" -type d && \
+    echo "查找clang文件:" && \
+    find /opt/ohos-sdk -name "clang" -type f && \
     echo "设置环境变量..."
 
 # 根据Linux SDK结构设置环境变量
