@@ -48,14 +48,31 @@ current_dir = meson.current_source_dir()
 
 # 检测是否在Docker环境中 (工作目录直接是MesonBuild~内容)
 if fs.exists(current_dir / 'cross-files')
-  # Docker环境：当前目录就包含MesonBuild~内容，项目根目录需要向上查找
-  # 但在Docker中，/workspace包含了所有项目文件
-  if fs.exists('/workspace/Plugins/sqlite-amalgamation/sqlite3.c')
-    sqlite_src = '/workspace/Plugins/sqlite-amalgamation/sqlite3.c'
-  else
-    # 回退到相对路径
-    project_root = current_dir / '..'
-    sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
+  # Docker环境：当前目录包含MesonBuild~内容
+  # 尝试多个可能的SQLite路径
+  possible_paths = [
+    '/workspace/Plugins/sqlite-amalgamation/sqlite3.c',           # 如果整个项目都在/workspace
+    current_dir / '../Plugins/sqlite-amalgamation/sqlite3.c',    # 标准相对路径
+    '/Plugins/sqlite-amalgamation/sqlite3.c'                     # 绝对路径（不太可能）
+  ]
+
+  sqlite_src = ''
+  foreach path : possible_paths
+    if fs.exists(path)
+      sqlite_src = path
+      message('Found SQLite source in Docker environment: ' + path)
+      break
+    endif
+  endforeach
+
+  # 如果都没找到，使用默认路径并让构建失败时显示调试信息
+  if sqlite_src == ''
+    message('SQLite source not found in Docker environment, trying paths:')
+    foreach path : possible_paths
+      message('  Checked: ' + path + ' - ' + (fs.exists(path) ? 'EXISTS' : 'NOT FOUND'))
+    endforeach
+    # 使用默认路径，让错误信息更清楚
+    sqlite_src = current_dir / '../Plugins/sqlite-amalgamation/sqlite3.c'
   endif
 else
   # 本地环境：正常的项目结构
