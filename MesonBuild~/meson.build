@@ -8,6 +8,10 @@ project('unity-sqlcipher-net', 'c',
   ]
 )
 
+# 导入必要的模块
+fs = import('fs')
+cc = meson.get_compiler('c')
+
 # 构建选项
 sqlite_debug = get_option('debug')
 
