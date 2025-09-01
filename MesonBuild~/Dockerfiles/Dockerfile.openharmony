@@ -35,11 +35,27 @@ RUN echo "下载 OpenHarmony SDK..." && \
     wget -q ${OHOS_SDK_URL} -O ohos-sdk.tar.gz && \
     echo "解压 OpenHarmony SDK..." && \
     tar -xzf ohos-sdk.tar.gz && \
+    echo "检查SDK结构..." && \
+    ls -la ohos-sdk/ && \
+    ls -la ohos-sdk/linux/ && \
+    echo "解压Linux平台的zip文件..." && \
+    cd ohos-sdk/linux && \
+    for zipfile in *.zip; do \
+        if [[ -f "$zipfile" ]]; then \
+            echo "解压 $zipfile..."; \
+            unzip -q "$zipfile"; \
+        fi; \
+    done && \
+    echo "检查解压后的Linux目录结构..." && \
+    ls -la && \
+    find . -name "native" -type d && \
     echo "移动SDK到最终位置..." && \
+    cd /tmp && \
     mv ohos-sdk /opt/ && \
     rm -f ohos-sdk.tar.gz && \
-    echo "验证SDK目录结构..." && \
+    echo "验证最终SDK目录结构..." && \
     ls -la /opt/ohos-sdk/ && \
+    ls -la /opt/ohos-sdk/linux/ && \
     echo "OpenHarmony SDK 安装完成"
 
 # 查找并设置正确的 OpenHarmony 环境变量
