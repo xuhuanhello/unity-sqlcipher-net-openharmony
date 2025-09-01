@@ -52,10 +52,43 @@ project_root = current_dir / '..'
 # 检测是否在Docker环境中 (工作目录直接是MesonBuild~内容)
 if fs.exists(current_dir / 'cross-files')
   # Docker环境：当前目录包含MesonBuild~内容
+  message('Docker environment detected. Current dir: ' + current_dir)
+  message('Checking Docker mount structure...')
+
+  # 检查Docker挂载结构
+  docker_paths_to_check = [
+    '/workspace',
+    '/workspace/..',
+    '/workspace/../..',
+    '/',
+    '/opt',
+    '/tmp'
+  ]
+
+  foreach check_path : docker_paths_to_check
+    if fs.exists(check_path)
+      message('  ' + check_path + ' exists')
+      if fs.exists(check_path / 'Plugins')
+        message('    -> Found Plugins directory!')
+        if fs.exists(check_path / 'Plugins/sqlite-amalgamation')
+          message('    -> Found sqlite-amalgamation directory!')
+          if fs.exists(check_path / 'Plugins/sqlite-amalgamation/sqlite3.c')
+            message('    -> Found sqlite3.c file!')
+          endif
+        endif
+      endif
+    else
+      message('  ' + check_path + ' does not exist')
+    endif
+  endforeach
+
   # 尝试多个可能的SQLite路径
   possible_paths = [
     '/workspace/Plugins/sqlite-amalgamation/sqlite3.c',           # 如果整个项目都在/workspace
+    '/workspace/../Plugins/sqlite-amalgamation/sqlite3.c',       # 项目在workspace的上级
+    '/workspace/../../Plugins/sqlite-amalgamation/sqlite3.c',    # 项目在workspace的上上级
     current_dir / '../Plugins/sqlite-amalgamation/sqlite3.c',    # 标准相对路径
+    current_dir / '../../Plugins/sqlite-amalgamation/sqlite3.c', # 向上两级目录
     '/Plugins/sqlite-amalgamation/sqlite3.c'                     # 绝对路径（不太可能）
   ]
 
