@@ -344,13 +344,33 @@ elif [[ -f "$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
 # 策略3: 绝对路径查找
 elif [[ -f "/workspace/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="/workspace/MesonBuild~/cross-files/$PLATFORM.ini"
+# 策略4: 当前工作目录查找（Docker环境）
+elif [[ -f "cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="cross-files/$PLATFORM.ini"
 else
     echo "错误: 找不到交叉编译文件"
+    echo "调试信息:"
+    echo "  当前工作目录: $(pwd)"
+    echo "  SCRIPT_DIR: $SCRIPT_DIR"
+    echo "  PROJECT_ROOT: $PROJECT_ROOT"
+    echo "  PLATFORM: $PLATFORM"
+    echo ""
     echo "尝试的路径:"
     echo "  $(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini"
     echo "  $PROJECT_ROOT/cross-files/$PLATFORM.ini"
     echo "  $PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
     echo "  /workspace/MesonBuild~/cross-files/$PLATFORM.ini"
+    echo "  cross-files/$PLATFORM.ini"
+    echo ""
+    echo "目录结构调试:"
+    echo "  /workspace 内容:"
+    ls -la /workspace/ 2>/dev/null || echo "    /workspace 不存在"
+    echo "  /workspace/MesonBuild~ 内容:"
+    ls -la /workspace/MesonBuild~/ 2>/dev/null || echo "    /workspace/MesonBuild~ 不存在"
+    echo "  /workspace/MesonBuild~/cross-files 内容:"
+    ls -la /workspace/MesonBuild~/cross-files/ 2>/dev/null || echo "    /workspace/MesonBuild~/cross-files 不存在"
+    echo "  当前目录 cross-files 内容:"
+    ls -la cross-files/ 2>/dev/null || echo "    ./cross-files 不存在"
     exit 1
 fi
 
