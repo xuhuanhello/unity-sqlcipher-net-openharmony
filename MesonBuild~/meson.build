@@ -39,9 +39,25 @@ openssl_subproject = subproject('openssl', default_options : openssl_options)
 openssl_dep = openssl_subproject.get_variable('libcrypto_dep')
 
 # 源文件路径 (现在应该是 SQLCipher 源码)
-# 使用绝对路径以支持Docker构建
-project_root = meson.current_source_dir() / '..'
-sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
+# 智能路径检测以支持Docker和本地构建
+current_dir = meson.current_source_dir()
+
+# 检测是否在Docker环境中 (工作目录直接是MesonBuild~内容)
+if fs.exists(current_dir / 'cross-files')
+  # Docker环境：当前目录就包含MesonBuild~内容，项目根目录需要向上查找
+  # 但在Docker中，/workspace包含了所有项目文件
+  if fs.exists('/workspace/Plugins/sqlite-amalgamation/sqlite3.c')
+    sqlite_src = '/workspace/Plugins/sqlite-amalgamation/sqlite3.c'
+  else
+    # 回退到相对路径
+    project_root = current_dir / '..'
+    sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
+  endif
+else
+  # 本地环境：正常的项目结构
+  project_root = current_dir / '..'
+  sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
+endif
 
 # SQLCipher 编译定义 - 现在通过头文件统一配置
 sqlcipher_c_args = [
