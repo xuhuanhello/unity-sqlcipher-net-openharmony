@@ -96,14 +96,16 @@ if fs.exists(current_dir / 'cross-files')
     endif
   endforeach
 
-  # 如果都没找到，使用默认路径并让构建失败时显示调试信息
+  # 如果都没找到，使用默认路径（Docker挂载修复后应该能找到）
   if sqlite_src == ''
     message('SQLite source not found in Docker environment, trying paths:')
     foreach path : possible_paths
       message('  Checked: ' + path + ' - ' + (fs.exists(path) ? 'EXISTS' : 'NOT FOUND'))
     endforeach
-    # 使用默认路径，让错误信息更清楚
+
+    # 使用默认路径，Docker挂载修复后应该能工作
     sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
+    message('Using default path: ' + sqlite_src)
   endif
 else
   # 本地环境：正常的项目结构
