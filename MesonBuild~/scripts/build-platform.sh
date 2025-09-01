@@ -333,20 +333,23 @@ fi
 # 使用多种路径策略确保在不同环境中都能找到文件
 CROSS_FILE=""
 
-# 策略1: 相对于当前脚本目录
-if [[ -f "$(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini" ]]; then
+# 策略1: 当前工作目录查找（Docker环境优先）
+if [[ -f "cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="cross-files/$PLATFORM.ini"
+# 策略2: 绝对路径查找（Docker环境）
+elif [[ -f "/workspace/cross-files/$PLATFORM.ini" ]]; then
+    CROSS_FILE="/workspace/cross-files/$PLATFORM.ini"
+# 策略3: 相对于当前脚本目录
+elif [[ -f "$(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="$(dirname "$SCRIPT_DIR")/cross-files/$PLATFORM.ini"
-# 策略2: 相对于PROJECT_ROOT
+# 策略4: 相对于PROJECT_ROOT
 elif [[ -f "$PROJECT_ROOT/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="$PROJECT_ROOT/cross-files/$PLATFORM.ini"
 elif [[ -f "$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="$PROJECT_ROOT/MesonBuild~/cross-files/$PLATFORM.ini"
-# 策略3: 绝对路径查找
+# 策略5: 传统绝对路径查找
 elif [[ -f "/workspace/MesonBuild~/cross-files/$PLATFORM.ini" ]]; then
     CROSS_FILE="/workspace/MesonBuild~/cross-files/$PLATFORM.ini"
-# 策略4: 当前工作目录查找（Docker环境）
-elif [[ -f "cross-files/$PLATFORM.ini" ]]; then
-    CROSS_FILE="cross-files/$PLATFORM.ini"
 else
     echo "错误: 找不到交叉编译文件"
     echo "调试信息:"
