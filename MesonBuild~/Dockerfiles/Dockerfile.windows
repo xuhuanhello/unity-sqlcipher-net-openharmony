@@ -14,10 +14,23 @@ RUN apt-get -qq update \
         gcc-mingw-w64-i686 \
     && rm -rf /var/lib/apt/lists/*
 
-# 尝试安装 ARM64 MinGW (如果可用)
+# 安装 ARM64 MinGW 工具链
+# Debian 12 默认仓库可能没有 ARM64 MinGW，需要使用其他方法
 RUN apt-get -qq update \
-    && (apt-get -qq install -y --no-install-recommends gcc-aarch64-w64-mingw32 || echo "ARM64 MinGW not available in this distribution") \
+    && apt-get -qq install -y --no-install-recommends \
+        wget \
+        xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# 下载并安装 LLVM-MinGW ARM64 工具链
+RUN cd /tmp \
+    && wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64.tar.xz \
+    && tar -xf llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64.tar.xz \
+    && mv llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64 /opt/llvm-mingw \
+    && rm llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64.tar.xz
+
+# 添加 LLVM-MinGW 到 PATH
+ENV PATH="/opt/llvm-mingw/bin:${PATH}"
 
 # 安装最新版本的 Meson (需要 >=1.2.0)
 RUN pip3 install --no-cache-dir --break-system-packages meson
@@ -27,4 +40,9 @@ WORKDIR /workspace
 
 # 验证安装
 RUN meson --version && ninja --version && x86_64-w64-mingw32-gcc --version && i686-w64-mingw32-gcc --version
-RUN (aarch64-w64-mingw32-gcc --version && echo "ARM64 MinGW available") || echo "ARM64 MinGW not available"
+
+# 验证 LLVM-MinGW ARM64 工具链
+RUN echo "验证 LLVM-MinGW ARM64 工具链..." \
+    && aarch64-w64-mingw32-clang --version \
+    && aarch64-w64-mingw32-clang++ --version \
+    && echo "✅ ARM64 MinGW 工具链安装成功"
