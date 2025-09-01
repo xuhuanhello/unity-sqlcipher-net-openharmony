@@ -33,8 +33,20 @@ perform_cleanup() {
 
 # 智能检测项目根目录
 if [[ -f "$SCRIPT_DIR/../cross-files/$1.ini" ]]; then
-    # 当前在MesonBuild~目录中（Docker环境或本地MesonBuild~目录）
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    # 当前在MesonBuild~目录中
+    MESONBUILD_DIR="$(dirname "$SCRIPT_DIR")"
+
+    # 检查是否有Plugins目录来确定真正的项目根目录
+    if [[ -d "$MESONBUILD_DIR/Plugins" ]]; then
+        # Plugins在同一级，说明整个项目都在这里
+        PROJECT_ROOT="$MESONBUILD_DIR"
+    elif [[ -d "$(dirname "$MESONBUILD_DIR")/Plugins" ]]; then
+        # Plugins在上一级，这是正常的项目结构
+        PROJECT_ROOT="$(dirname "$MESONBUILD_DIR")"
+    else
+        # 回退到MesonBuild~目录
+        PROJECT_ROOT="$MESONBUILD_DIR"
+    fi
 elif [[ -f "$SCRIPT_DIR/../../MesonBuild~/cross-files/$1.ini" ]]; then
     # 正常的项目结构
     PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -42,6 +54,9 @@ else
     # 回退到原始逻辑
     PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 fi
+
+echo "检测到的项目根目录: $PROJECT_ROOT"
+echo "检查Plugins目录: $(test -d "$PROJECT_ROOT/Plugins" && echo "存在" || echo "不存在")"
 
 # 解析命令行参数
 PLATFORM=""
