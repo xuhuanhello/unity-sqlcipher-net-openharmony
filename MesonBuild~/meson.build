@@ -53,34 +53,29 @@ project_root = current_dir / '..'
 if fs.exists(current_dir / 'cross-files')
   # Docker环境：当前目录包含MesonBuild~内容
   message('Docker environment detected. Current dir: ' + current_dir)
-  message('Checking Docker mount structure...')
+  message('Listing /workspace contents...')
 
-  # 检查Docker挂载结构
-  docker_paths_to_check = [
-    '/workspace',
-    '/workspace/..',
-    '/workspace/../..',
-    '/',
-    '/opt',
-    '/tmp'
-  ]
+  # 使用run_command来列出目录内容
+  ls_result = run_command('ls', '-la', '/workspace', check: false)
+  if ls_result.returncode() == 0
+    message('Contents of /workspace:')
+    foreach line : ls_result.stdout().strip().split('\n')
+      message('  ' + line)
+    endforeach
+  else
+    message('Failed to list /workspace contents')
+  endif
 
-  foreach check_path : docker_paths_to_check
-    if fs.exists(check_path)
-      message('  ' + check_path + ' exists')
-      if fs.exists(check_path / 'Plugins')
-        message('    -> Found Plugins directory!')
-        if fs.exists(check_path / 'Plugins/sqlite-amalgamation')
-          message('    -> Found sqlite-amalgamation directory!')
-          if fs.exists(check_path / 'Plugins/sqlite-amalgamation/sqlite3.c')
-            message('    -> Found sqlite3.c file!')
-          endif
-        endif
-      endif
-    else
-      message('  ' + check_path + ' does not exist')
-    endif
-  endforeach
+  # 也检查上级目录
+  ls_parent_result = run_command('ls', '-la', '/workspace/..', check: false)
+  if ls_parent_result.returncode() == 0
+    message('Contents of /workspace/..:')
+    foreach line : ls_parent_result.stdout().strip().split('\n')
+      message('  ' + line)
+    endforeach
+  else
+    message('Failed to list /workspace/.. contents')
+  endif
 
   # 尝试多个可能的SQLite路径
   possible_paths = [
