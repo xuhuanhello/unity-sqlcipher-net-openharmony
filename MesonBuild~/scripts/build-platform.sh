@@ -373,7 +373,20 @@ else
     echo "  /workspace/MesonBuild~/cross-files 内容:"
     ls -la /workspace/MesonBuild~/cross-files/ 2>/dev/null || echo "    /workspace/MesonBuild~/cross-files 不存在"
     echo "  当前目录 cross-files 内容:"
-    ls -la cross-files/ 2>/dev/null || echo "    ./cross-files 不存在"
+    if [[ -d "cross-files" ]]; then
+        ls -la cross-files/
+        echo "  查找 harmony-arm64.ini:"
+        find cross-files/ -name "*harmony*" -o -name "*arm64*"
+        echo "  所有 .ini 文件:"
+        find cross-files/ -name "*.ini"
+    else
+        echo "    ./cross-files 不存在"
+    fi
+
+    echo "  直接检查文件存在性:"
+    echo "    cross-files/harmony-arm64.ini: $(test -f cross-files/harmony-arm64.ini && echo '存在' || echo '不存在')"
+    echo "    /workspace/cross-files/harmony-arm64.ini: $(test -f /workspace/cross-files/harmony-arm64.ini && echo '存在' || echo '不存在')"
+
     exit 1
 fi
 
