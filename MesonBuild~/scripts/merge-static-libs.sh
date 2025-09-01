@@ -158,7 +158,34 @@ if [[ -f "$EXPORTS_FILE" ]]; then
 
     # 使用 ld -r 合并所有对象文件，包括SQLite对象文件
     echo "  正在合并对象文件..."
-    ld -r -o combined.o *.o ..*.o
+
+    # 收集所有对象文件，包括以..开头的特殊文件
+    ALL_OBJ_FILES=()
+
+    # 添加普通的.o文件
+    for obj in *.o; do
+        if [[ -f "$obj" ]]; then
+            ALL_OBJ_FILES+=("$obj")
+        fi
+    done
+
+    # 添加以..开头的.o文件
+    for obj in ..*.o; do
+        if [[ -f "$obj" ]]; then
+            ALL_OBJ_FILES+=("$obj")
+        fi
+    done
+
+    echo "  找到 ${#ALL_OBJ_FILES[@]} 个对象文件"
+    echo "  前5个文件: ${ALL_OBJ_FILES[@]:0:5}"
+
+    if [[ ${#ALL_OBJ_FILES[@]} -eq 0 ]]; then
+        echo "❌ 错误: 没有找到任何对象文件"
+        exit 1
+    fi
+
+    # 使用数组展开来传递所有文件
+    ld -r -o combined.o "${ALL_OBJ_FILES[@]}"
 
     # 修正：使用正确的符号控制方法
     echo "  正在应用符号白名单，隐藏OpenSSL符号..."
@@ -227,8 +254,22 @@ if [[ -f "$EXPORTS_FILE" ]]; then
 else
     echo "❌ 未找到符号导出列表文件: $EXPORTS_FILE"
     echo "⚠️  使用简单合并，无符号控制"
-    # 明确包含所有对象文件（包括以..开头的SQLite文件）
-    ar crs "$WORK_DIR/$OUTPUT_LIB" *.o ..*.o
+
+    # 收集所有对象文件（包括以..开头的SQLite文件）
+    ALL_OBJ_FILES=()
+    for obj in *.o; do
+        if [[ -f "$obj" ]]; then
+            ALL_OBJ_FILES+=("$obj")
+        fi
+    done
+    for obj in ..*.o; do
+        if [[ -f "$obj" ]]; then
+            ALL_OBJ_FILES+=("$obj")
+        fi
+    done
+
+    echo "简单合并 ${#ALL_OBJ_FILES[@]} 个对象文件"
+    ar crs "$WORK_DIR/$OUTPUT_LIB" "${ALL_OBJ_FILES[@]}"
 fi
 
 # 验证合并结果
