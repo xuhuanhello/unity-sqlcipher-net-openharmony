@@ -44,19 +44,50 @@ ar x "$WORK_DIR/$SSL_LIB"
 echo "调试: 检查提取的目标文件..."
 echo "目标文件总数: $(ls *.o | wc -l)"
 
-# 查找SQLite目标文件（处理特殊文件名）
-SQLITE_OBJ=".._Plugins_sqlite-amalgamation_sqlite3.c.o"
-if [[ -f "$SQLITE_OBJ" ]]; then
-    echo "✅ 找到SQLite目标文件: $SQLITE_OBJ"
+# 查找SQLite目标文件（智能查找）
+echo "查找SQLite目标文件..."
+SQLITE_OBJ=""
+
+# 尝试多种可能的SQLite目标文件名
+POSSIBLE_NAMES=(
+    ".._Plugins_sqlite-amalgamation_sqlite3.c.o"
+    "sqlite3.c.o"
+    "*sqlite*.o"
+)
+
+for pattern in "${POSSIBLE_NAMES[@]}"; do
+    if [[ "$pattern" == "*sqlite*.o" ]]; then
+        # 使用通配符查找
+        FOUND_FILES=($(find . -name "$pattern" -type f))
+        if [[ ${#FOUND_FILES[@]} -gt 0 ]]; then
+            SQLITE_OBJ="${FOUND_FILES[0]}"
+            echo "✅ 通过通配符找到SQLite目标文件: $SQLITE_OBJ"
+            break
+        fi
+    else
+        # 直接查找
+        if [[ -f "$pattern" ]]; then
+            SQLITE_OBJ="$pattern"
+            echo "✅ 找到SQLite目标文件: $SQLITE_OBJ"
+            break
+        fi
+    fi
+done
+
+if [[ -n "$SQLITE_OBJ" && -f "$SQLITE_OBJ" ]]; then
     echo "文件大小: $(ls -lh "$SQLITE_OBJ" | awk '{print $5}')"
     echo "检查其中的符号:"
-    nm "$SQLITE_OBJ" | grep "T _sqlite3_" | head -5
-    SQLITE_SYMBOL_COUNT=$(nm "$SQLITE_OBJ" | grep "T _sqlite3_" | wc -l)
+    nm "$SQLITE_OBJ" | grep "T _sqlite3_" | head -5 || echo "未找到标准sqlite3符号，检查cr_前缀符号:"
+    nm "$SQLITE_OBJ" | grep "T _cr_sqlite3_" | head -5 || echo "未找到cr_前缀符号"
+    SQLITE_SYMBOL_COUNT=$(nm "$SQLITE_OBJ" | grep -E "T _sqlite3_|T _cr_sqlite3_" | wc -l)
     echo "✅ SQLite符号统计: $SQLITE_SYMBOL_COUNT 个函数"
 else
-    echo "❌ 错误: 找不到SQLite目标文件 $SQLITE_OBJ"
+    echo "❌ 错误: 找不到SQLite目标文件"
+    echo "尝试的文件名: ${POSSIBLE_NAMES[*]}"
     echo "当前目录文件:"
     ls -la
+    echo "查找所有.o文件:"
+    find . -name "*.o" -type f
     exit 1
 fi
 
