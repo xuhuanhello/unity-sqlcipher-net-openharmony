@@ -46,6 +46,9 @@ openssl_dep = openssl_subproject.get_variable('libcrypto_dep')
 # 智能路径检测以支持Docker和本地构建
 current_dir = meson.current_source_dir()
 
+# 先定义project_root，确保所有分支都有这个变量
+project_root = current_dir / '..'
+
 # 检测是否在Docker环境中 (工作目录直接是MesonBuild~内容)
 if fs.exists(current_dir / 'cross-files')
   # Docker环境：当前目录包含MesonBuild~内容
@@ -72,11 +75,10 @@ if fs.exists(current_dir / 'cross-files')
       message('  Checked: ' + path + ' - ' + (fs.exists(path) ? 'EXISTS' : 'NOT FOUND'))
     endforeach
     # 使用默认路径，让错误信息更清楚
-    sqlite_src = current_dir / '../Plugins/sqlite-amalgamation/sqlite3.c'
+    sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
   endif
 else
   # 本地环境：正常的项目结构
-  project_root = current_dir / '..'
   sqlite_src = project_root / 'Plugins/sqlite-amalgamation/sqlite3.c'
 endif
 
