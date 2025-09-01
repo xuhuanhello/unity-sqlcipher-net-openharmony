@@ -55,13 +55,12 @@ jobs:
 
       - name: Build ${{ matrix.platform }} libraries
         run: |
-          cd MesonBuild~
           for target in ${{ matrix.targets }}; do
             echo "Building $target..."
 
-            # Build Docker image with proper caching
+            # Build Docker image with proper caching (from MesonBuild~ directory)
             docker buildx build \
-              -f Dockerfiles/${{ matrix.dockerfile }} \
+              -f MesonBuild~/Dockerfiles/${{ matrix.dockerfile }} \
               --cache-from type=gha \
               --cache-to type=gha,mode=max \
               --build-arg PLATFORM=$target \
@@ -73,9 +72,10 @@ jobs:
               }
 
             # Run build inside container with auto cleanup
+            # 挂载项目根目录而不是MesonBuild~目录
             docker run --rm \
               -v $(pwd):/workspace \
-              -w /workspace \
+              -w /workspace/MesonBuild~ \
               sqlcipher-builder-$target \
               bash -c "
                 # 在容器内安装OpenSSL依赖
