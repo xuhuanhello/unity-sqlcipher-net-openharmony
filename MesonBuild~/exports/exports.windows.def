@@ -1,5 +1,4 @@
 EXPORTS
-; SQLite/SQLCipher 核心 API - 使用 cr_ 前缀
 cr_sqlite3_backup_finish
 cr_sqlite3_backup_init
 cr_sqlite3_backup_step
@@ -51,11 +50,3 @@ cr_sqlite3_shutdown
 cr_sqlite3_step
 cr_sqlite3_threadsafe
 cr_sqlite3_win32_set_directory
-
-; SQLCipher 加密 API (如果需要的话)
-; cr_sqlite3_key
-; cr_sqlite3_key_v2
-; cr_sqlite3_rekey
-; cr_sqlite3_rekey_v2
-
-; 注意：所有 OpenSSL 符号都被隐藏，不在此列表中

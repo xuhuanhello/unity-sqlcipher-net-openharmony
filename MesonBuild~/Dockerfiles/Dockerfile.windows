@@ -12,6 +12,9 @@ RUN apt-get -qq update \
         ca-certificates \
         gcc-mingw-w64-x86-64 \
         gcc-mingw-w64-i686 \
+        file \
+        binutils \
+        binutils-mingw-w64 \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 ARM64 MinGW 工具链

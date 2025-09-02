@@ -1,5 +1,3 @@
-# iOS 符号导出列表 (详细列表)
-# 只导出 SQLite/SQLCipher 公共 API (使用 cr_ 前缀)
 _cr_sqlite3_backup_finish
 _cr_sqlite3_backup_init
 _cr_sqlite3_backup_step
@@ -50,7 +48,3 @@ _cr_sqlite3_serialize
 _cr_sqlite3_shutdown
 _cr_sqlite3_step
 _cr_sqlite3_threadsafe
-_cr_sqlite3_win32_set_directory
-# SQLCipher 加密函数
-_cr_sqlite3_key
-_cr_sqlite3_rekey

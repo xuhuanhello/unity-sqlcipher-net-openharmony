@@ -173,11 +173,81 @@ build_with_docker() {
         exit 1
     fi
     
-    # 检查Docker是否运行
+    # 检查Docker是否运行，如果没有运行则尝试启动
     if ! docker info &> /dev/null; then
-        echo "错误: Docker 服务未运行"
-        echo "请启动 Docker 服务"
-        exit 1
+        echo "Docker 服务未运行，尝试启动..."
+
+        # 根据操作系统尝试启动Docker
+        case "$(uname -s)" in
+            "Darwin")
+                # macOS - 启动Docker Desktop
+                if [[ -d "/Applications/Docker.app" ]]; then
+                    echo "启动 Docker Desktop..."
+                    open -a Docker
+
+                    # 等待Docker启动
+                    echo "等待 Docker 启动..."
+                    for i in {1..30}; do
+                        if docker info &> /dev/null; then
+                            echo "✅ Docker 启动成功"
+                            break
+                        fi
+                        echo -n "."
+                        sleep 2
+                    done
+                    echo ""
+
+                    # 再次检查
+                    if ! docker info &> /dev/null; then
+                        echo "❌ Docker 启动失败或超时"
+                        echo "请手动启动 Docker Desktop 并重试"
+                        exit 1
+                    fi
+                else
+                    echo "❌ 未找到 Docker Desktop，请安装 Docker"
+                    exit 1
+                fi
+                ;;
+            "Linux")
+                # Linux - 尝试启动Docker服务
+                echo "尝试启动 Docker 服务..."
+                if command -v systemctl &> /dev/null; then
+                    sudo systemctl start docker || {
+                        echo "❌ 无法启动 Docker 服务，请检查安装"
+                        exit 1
+                    }
+                elif command -v service &> /dev/null; then
+                    sudo service docker start || {
+                        echo "❌ 无法启动 Docker 服务，请检查安装"
+                        exit 1
+                    }
+                else
+                    echo "❌ 无法确定如何启动 Docker 服务"
+                    echo "请手动启动 Docker 并重试"
+                    exit 1
+                fi
+
+                # 等待Docker启动
+                for i in {1..10}; do
+                    if docker info &> /dev/null; then
+                        echo "✅ Docker 启动成功"
+                        break
+                    fi
+                    sleep 1
+                done
+
+                if ! docker info &> /dev/null; then
+                    echo "❌ Docker 启动失败"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "❌ 不支持的操作系统，请手动启动 Docker"
+                exit 1
+                ;;
+        esac
+    else
+        echo "✅ Docker 服务正在运行"
     fi
     
     # 确定 Dockerfile 和镜像名称
@@ -250,9 +320,9 @@ build_with_docker() {
         local dockerfile_path="$PROJECT_ROOT/MesonBuild~/Dockerfiles/$dockerfile_name"
         echo "构建 Docker 镜像: $image_name"
         
-        # Android构建需要使用amd64平台以确保NDK工具链正常工作
+        # 某些平台需要使用amd64平台以确保工具链正常工作
         local docker_build_args=""
-        if [[ "$platform" == android-* ]]; then
+        if [[ "$platform" == android-* ]] || [[ "$platform" == windows-* ]]; then
             docker_build_args="--platform=linux/amd64"
         fi
         
@@ -272,10 +342,12 @@ build_with_docker() {
     docker_cmd="$docker_cmd -v \"$PROJECT_ROOT:/workspace\""
     docker_cmd="$docker_cmd -w /workspace/MesonBuild~"
     
-    # 对于 Android 平台，需要设置 ANDROID_NDK_ROOT 并使用amd64平台
+    # 某些平台需要设置特定的平台和环境变量
     if [[ "$platform" == android-* ]]; then
         docker_cmd="$docker_cmd --platform=linux/amd64"
         docker_cmd="$docker_cmd -e ANDROID_NDK_ROOT=/opt/ndk"
+    elif [[ "$platform" == windows-* ]]; then
+        docker_cmd="$docker_cmd --platform=linux/amd64"
     fi
     
     docker_cmd="$docker_cmd $image_name"
@@ -555,6 +627,21 @@ if [[ "$PLATFORM" == harmony-* && -f "$TEMP_CROSS_FILE" ]]; then
 fi
 
 echo "构建完成: $PLATFORM"
+
+# 自动进行符号检查
+echo ""
+echo "🔍 开始符号检查..."
+
+# 调用独立的符号检查脚本
+if [[ -f "$SCRIPT_DIR/check-symbols.sh" ]]; then
+    bash "$SCRIPT_DIR/check-symbols.sh" "$PLATFORM" || {
+        echo "⚠️  符号检查发现问题，但构建继续"
+    }
+else
+    echo "⚠️  符号检查脚本不存在: $SCRIPT_DIR/check-symbols.sh"
+fi
+
+echo ""
 
 # 构建后可选清理（批量构建时跳过）
 if [[ -d "$BUILD_DIR" && -z "$BATCH_BUILD" ]]; then

@@ -108,21 +108,14 @@ if [[ -f "$EXPORTS_FILE" ]]; then
     UNITY_SYMBOLS_FILE="$EXPORTS_FILE"
     echo "  ✅ 使用Unity完整符号列表: $UNITY_SYMBOLS_FILE"
 
-    # 步骤1: 获取SQLite库中实际存在的符号（现在应该是cr_前缀）
-    echo "  🔍 检查SQLite库中实际存在的符号..."
-    SQLITE_OBJ=$(find . -name "*sqlite*.o" | head -1)
-    ACTUAL_SYMBOLS=$(mktemp)
-    # 检查带cr_前缀的符号（因为源代码已经被sed修改了）
-    nm "$SQLITE_OBJ" | grep "T _cr_sqlite3_" | awk '{print $3}' > "$ACTUAL_SYMBOLS"
-    echo "  📊 实际找到的带cr_前缀符号数: $(wc -l < "$ACTUAL_SYMBOLS")"
-    echo "  📋 前5个实际符号:"
-    head -5 "$ACTUAL_SYMBOLS"
+    # 步骤1: 严格按照符号导出文件控制符号
+    echo "  🔧 严格按照符号导出文件控制符号..."
 
-    # 步骤2: 直接使用exports.ios.symbols文件，过滤实际存在的符号
-    echo "  🔧 使用Unity符号导出文件，过滤实际存在的符号..."
+    # 直接使用exports.ios.symbols文件，不检查对象文件中的符号
+    # 这样可以确保只导出我们明确想要导出的符号
     FILTERED_SYMBOLS=$(mktemp)
 
-    # 读取符号导出文件，跳过注释行
+    # 读取符号导出文件，跳过注释行和空行
     while IFS= read -r line; do
         # 跳过空行和注释行
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
@@ -131,25 +124,20 @@ if [[ -f "$EXPORTS_FILE" ]]; then
         symbol=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [[ -z "$symbol" ]] && continue
 
-        # 检查符号是否在实际编译的库中存在
-        if grep -q "^$symbol$" "$ACTUAL_SYMBOLS"; then
-            echo "$symbol" >> "$FILTERED_SYMBOLS"
-            echo "    ✅ 导出符号: $symbol"
-        else
-            echo "    ⚠️  跳过不存在的符号: $symbol"
-        fi
+        echo "$symbol" >> "$FILTERED_SYMBOLS"
+        echo "    ✅ 将导出符号: $symbol"
     done < "$UNITY_SYMBOLS_FILE"
 
-    # 步骤3: 去重排序
+    # 去重排序
     sort "$FILTERED_SYMBOLS" | uniq > exported_symbols.txt
 
     # 清理临时文件
-    rm -f "$ACTUAL_SYMBOLS" "$FILTERED_SYMBOLS"
+    rm -f "$FILTERED_SYMBOLS"
 
-    echo "  ✅ 过滤后的符号数量: $(wc -l < exported_symbols.txt)"
+    echo "  ✅ 符号导出列表创建完成，符号数量: $(wc -l < exported_symbols.txt)"
 
 
-    echo "✅ SQLite API白名单创建完成 ($(wc -l < exported_symbols.txt) 个符号)"
+    echo "✅ 符号导出白名单创建完成 ($(wc -l < exported_symbols.txt) 个符号)"
     echo "前5个符号:"
     head -5 exported_symbols.txt
 
