@@ -441,7 +441,8 @@ rm -rf build-*
 
 **功能**:
 - 🔗 合并多个静态库为单一库文件
-- 🔒 隐藏OpenSSL符号，只导出SQLite符号
+- 🔒 隐藏OpenSSL符号，只导出SQLite符号（总计52个，其中cr_sqlite3_win32_set_directory仅在Windows上存在，idbvfs_register仅在webgp存在，
+因此其他平台预期正常导出50个）
 - 📊 符号统计和验证
 - ✅ 确保Unity所需的50+个符号正确导出
 

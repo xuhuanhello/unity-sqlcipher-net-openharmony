@@ -141,6 +141,9 @@ elif host_machine.system() == 'darwin'
 elif host_machine.system() == 'harmony'
   # HarmonyOS 使用版本脚本隐藏符号
   symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.harmony.map']
+elif host_machine.system() == 'android' or get_option('android_build')
+  # Android 使用专门的版本脚本，精确控制符号导出
+  symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.android.map']
 else
   # Unix-like 系统使用版本脚本隐藏符号
   symbol_hiding_args += ['-Wl,--version-script=' + meson.current_source_dir() + '/exports/exports.linux.map']

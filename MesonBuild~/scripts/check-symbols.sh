@@ -573,11 +573,35 @@ else
     ISSUES=$((ISSUES + 1))
 fi
 
+# Android 平台额外检查 16KB 对齐
+if [[ "$PLATFORM" == "android" ]]; then
+    echo ""
+    print_info "7. Android ELF 16KB 对齐检查"
+    echo "========================================"
+
+    # 获取脚本目录
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ALIGNMENT_SCRIPT="$SCRIPT_DIR/check-android-alignment.sh"
+
+    if [[ -f "$ALIGNMENT_SCRIPT" ]]; then
+        # 运行对齐检查脚本
+        if "$ALIGNMENT_SCRIPT" "$LIBRARY_FILE"; then
+            print_success "✅ Android ELF 16KB 对齐检查通过"
+        else
+            print_warning "⚠️  Android ELF 对齐检查失败"
+            print_info "💡 提示: 对齐不足的库可能在 Android 14+ 设备上无法正常加载"
+            ISSUES=$((ISSUES + 1))
+        fi
+    else
+        print_warning "⚠️  Android 对齐检查脚本不存在: $ALIGNMENT_SCRIPT"
+    fi
+fi
+
 echo ""
 if [[ $ISSUES -eq 0 ]]; then
-    print_success "🎉 所有符号检查通过！"
+    print_success "🎉 所有检查通过！"
     exit 0
 else
-    print_warning "⚠️  发现 $ISSUES 个问题，请检查符号导出配置"
+    print_warning "⚠️  发现 $ISSUES 个问题，请检查配置"
     exit 1
 fi

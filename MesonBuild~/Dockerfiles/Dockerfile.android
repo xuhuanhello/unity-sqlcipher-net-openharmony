@@ -24,7 +24,7 @@ RUN pip3 install --no-cache-dir --break-system-packages meson
 
 # 下载并安装 Android NDK
 RUN curl -SLO https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux-x86_64.zip \
-    && unzip android-ndk-${NDK_VERSION}-linux-x86_64.zip \
+    && unzip -q android-ndk-${NDK_VERSION}-linux-x86_64.zip \
     && mv ./android-ndk-${NDK_VERSION} /opt/ndk \
     && rm android-ndk-${NDK_VERSION}-linux-x86_64.zip
 
